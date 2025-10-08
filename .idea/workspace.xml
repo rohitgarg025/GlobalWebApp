@@ -4,8 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="added main.py file containing the script for producing code">
+    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="main files">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.venv/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.venv/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -116,7 +118,31 @@
       <option name="project" value="LOCAL" />
       <updated>1759951122492</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="amended git ignore">
+      <option name="closed" value="true" />
+      <created>1759951328609</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1759951328609</updated>
+    </task>
+    <task id="LOCAL-00004" summary="amended git ignore">
+      <option name="closed" value="true" />
+      <created>1759951397458</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1759951397458</updated>
+    </task>
+    <task id="LOCAL-00005" summary="main files">
+      <option name="closed" value="true" />
+      <created>1759951464658</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1759951464658</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -159,6 +185,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="added main.py file containing the script for producing code" />
-    <option name="LAST_COMMIT_MESSAGE" value="added main.py file containing the script for producing code" />
+    <MESSAGE value="amended git ignore" />
+    <MESSAGE value="main files" />
+    <option name="LAST_COMMIT_MESSAGE" value="main files" />
   </component>
 </project>
