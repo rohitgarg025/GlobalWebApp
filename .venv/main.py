@@ -51,8 +51,12 @@ def get_consolidated_report(df_list):
         :param df_list:A
         :return:
         '''
-    file1 = df_list[0]
-    file2 = df_list[1]
+    file1 = df_list[0].copy()
+    file2 = df_list[1].copy()
+    file3 = pd.DataFrame()
+    if len(df_list) > 2:
+        file3 = df_list[2].copy()
+
     # --- Step 3: Create a derived key column in both files ---
     # Example: Combine 'Resource Code' and 'Resource Name' (adjust as per your column names)
     file1['Key'] = file1['Activity Name'].astype(str).str.strip() + "   " + file1['Item Desc'].astype(str).str.strip()
@@ -61,7 +65,7 @@ def get_consolidated_report(df_list):
 
     print("Performing VLOOKUP (merge)...")
     file1 = file1.merge(file2[['Key', 'Resource Type']], on='Key', how='left')
-    return [file1,file2]
+    return [file1,file2,file3]
 
 def clean_df(df):
     # Step 7: Rename metric columns
@@ -75,6 +79,19 @@ def clean_df(df):
         return df
     except:
         print("Invalid columns or data in uploaded excel files!\n")
+
+def get_merged_df_with_stock_report(pivot, df_stock_report,stock_cols):
+    '''
+    :param pivot: pd.DataFrame
+    :param df_stock_report: pd.DataFrame
+    :return: pd.DataFrame
+    '''
+
+    print("Performing VLOOKUP (merge) of resource report with stock report...")
+    pivot = pivot.merge(df_stock_report[['Item Desc'] + stock_cols ], on='Item Desc', how='left')
+    return pivot
+
+
 
 def get_labour_sheet(df_list):
 
@@ -193,6 +210,16 @@ def get_material_sheet(df_list):
         "Wastage %"
     ]
 
+    stock_cols = []
+    if len(file_list) > 2:
+        df_stock_report = file_list[2].copy()
+        stock_cols = ['Stock Received Qty (B)', 'Project Transfer Qty (E)', 'Stock Issue Qty (D)', 'Closing Stock Qty (CG)']
+        pivot = get_merged_df_with_stock_report(pivot.copy(), df_stock_report,stock_cols)
+        for col in stock_cols:
+            pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)  # Convert to numeric, replace NaNs with 0
+
+        desired_columns_order.extend(stock_cols)
+
     # The 'Total' row adds the 'Total' value in the index columns, but since
     # reset_index() is used, the 'Total' row is just another data row.
     # We ensure all columns are present before reindexing.
@@ -211,6 +238,11 @@ def get_material_sheet(df_list):
     pivot["Actual Rate"] = pivot["Actual Rate"].round(2)
     pivot["Actual Amt"] = pivot["Actual Amt"].round(2)
 
+    if len(file_list) > 2:
+        # Check if column exists before trying to round it (safety check)
+        for col in stock_cols:
+            pivot[col] = pivot[col].round(2)
+
     # Sort alphabetically for neatness
     pivot = pivot.sort_values(by=["Item Group", "Item Desc"])
 
@@ -223,10 +255,91 @@ def get_material_sheet(df_list):
 
 def get_activity_costing_report(df_list):
     '''
-    :param df_list:
+    :param df_list: pd.DataFrame
     :return:
     '''
-    pass
+
+    # Step 1 : Prepare consolidated dataframe
+    file_list = get_consolidated_report(df_list)
+    df = file_list[0].copy()
+    df = clean_df(df)
+
+    # Step2: Apply Pivot to get activity wise costing
+    # Ensure numeric conversions
+    numeric_cols = ["Est Amt", "Theoritical Amt", "Actual Amt"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Create Pivot Table
+    pivot = pd.pivot_table(
+        df,
+        index=["Parent WBS Name", "Activity Name", "Activity Unit"],
+        columns=["Resource Type"],
+        values=numeric_cols,
+        aggfunc=sum,
+        fill_value=0,
+        margins=True,
+        margins_name="Total"
+    )
+
+    # Flatten by joining the level names
+    # Example: ('Actual Amt', 'material') -> 'Actual Amt - Material'
+    new_columns = [
+        f"{level1.upper()} - {level2.upper()}"
+        for level1, level2 in pivot.columns
+    ]
+    pivot.columns = new_columns
+
+    # 4. Final Cleanup: Convert 'Activity Name' from index back to a regular column
+    key_cols = ["Parent WBS Name", "Activity Name", "Activity Unit"]
+    pivot = pivot.reset_index()
+
+    # --- NEW STEP: Define and Apply Desired Column Order ---
+
+    # Define the desired order for the two levels of the hierarchy
+    amount_order = ["Est Amt", "Theoritical Amt", "Actual Amt"]
+    resource_order = ["MATERIAL", "SERVICE", "Total"]  # 'Total' must match margins_name capitalization
+
+    # Build the list of desired column names (excluding the key columns)
+    desired_data_cols = []
+    for amount in amount_order:
+        for resource in resource_order:
+            # Recreate the exact format used when flattening (e.g., 'EST AMT - MATERIAL')
+            col_name = f"{amount.upper()} - {resource.upper()}"
+
+            # Check if the column exists (useful if some combinations are missing)
+            if col_name in pivot.columns:
+                desired_data_cols.append(col_name)
+
+    # Combine the key columns and the desired data columns for the final order
+    final_col_order = key_cols + desired_data_cols
+
+    # Reindex the DataFrame to apply the custom column order
+    pivot = pivot.reindex(columns=final_col_order)
+
+    # 5. FIX THE TYPE ERROR: Use .to_numeric to ONLY process numeric columns
+
+    # Filter for columns that are not key columns
+    numeric_cols_to_round = [col for col in pivot.columns if col not in key_cols]
+
+    for col in numeric_cols_to_round:
+        # 5a: Convert column to numeric, forcing any non-numeric values to 0.
+        pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)
+
+        # 5b: Apply rounding.
+        pivot[col] = pivot[col].round(2)
+
+    # 5. Round the results
+    # All columns except the first one ('Activity Name') are numeric amounts
+    # for col in pivot.columns[1:]:
+    #     pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)
+    #     pivot[col] = pivot[col].round(2)
+
+    output_path = get_output_excel("Activity Costing Report",".xlsx")
+    pivot.to_excel(output_path, index=False)
+    print(f"✅ Activity Costing Report generated: {output_path}")
+
+    return pivot
 
 def excel_transform(df_list,transform_option):
     '''
@@ -241,6 +354,11 @@ def excel_transform(df_list,transform_option):
         return get_material_sheet(df_list.copy())
     elif transform_option == "activity_costing_report":
         return get_activity_costing_report(df_list.copy())
+    elif transform_option == "all":
+        ls = get_labour_sheet(df_list.copy())
+        ms = get_material_sheet(df_list.copy())
+        acs = get_activity_costing_report(df_list.copy())
+        return 0;
     else:
         raise Exception("Invalid transform option!")
         return 0
@@ -271,11 +389,6 @@ if __name__ == '__main__':
     print(f"You entered: {transform_option}")
 
     excel_transform(df_list,transform_option)
-
-
-
-
-
 
     '''
     1. Consider that the two files are located in same folder as the python script. 
