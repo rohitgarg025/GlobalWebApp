@@ -2,7 +2,58 @@ import pandas as pd
 import sys
 import os
 from datetime import datetime
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import pandas as pd
 
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+START_ROW = 3
+LABOUR_REPORT_TITLE = "Labour Costing Report"
+LABOUR_SUMMARY_TITLE = 'Labour Costing Summary'
+
+def format_excel_with_headers(writer, sheet_name, df, report_title, project_name=None):
+    """
+    Format Excel sheet with headers and styling
+    """
+    workbook = writer.book
+    worksheet = writer.sheets[sheet_name]
+
+    # Add Report Title (Row 1)
+    worksheet['A1'] = f'Report Type : {report_title}'
+    worksheet['A1'].font = Font(name='Arial', size=14, bold=True)
+    # worksheet['A1'].fill = PatternFill(start_color='0066CC', end_color='0066CC', fill_type='solid')
+    worksheet['A1'].alignment = Alignment(horizontal='left')
+    # worksheet.merge_cells(f'A1:{get_column_letter(len(df.columns))}1')
+
+    # Add Project Name (Row 2) if provided
+    if project_name:
+        worksheet['A2'] = f'Project Name : {project_name}'
+        worksheet['A2'].font = Font(name='Arial', size=11, bold=True)
+        worksheet['A2'].alignment = Alignment(horizontal='left')
+
+    # Add Generation Date (Row 3)
+    row_offset = 3 if project_name else 2
+    worksheet[f'A{row_offset}'] = f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+    worksheet[f'A{row_offset}'].font = Font(name='Arial', size=9, italic=True)
+
+    # Format column headers
+    header_row = row_offset+1  # Leave one blank row
+    header_fill = PatternFill(start_color='0066CC', end_color='0066CC', fill_type='solid')
+    header_font = Font(name='Arial', size=10, bold=True, color='FFFFFF')
+    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    for col in range(1, len(df.columns) + 1):
+        cell = worksheet.cell(row=header_row, column=col)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+# CONSTANTS
+LABOUR_REPORT = "Labour Report"
+MATERIAL_REPORT = "Material Reconciliation Report"
+ACTIVITY_COSTING_REPORT = "Activity Wise Costing Report"
+ALL_REPORTS = "All of the above"
 def get_output_excel(base_filename, file_extension):
     '''
     :param base_filename: 'output report_name'
@@ -19,7 +70,7 @@ def get_output_excel(base_filename, file_extension):
     # Construct the new filename with the timestamp
     new_filename = f"{base_filename}_{timestamp}{file_extension}"
 
-    return f"Generated filename: {new_filename}"
+    return f"{new_filename}"
 
     # Example of creating a file with this name (optional)
     # with open(new_filename, 'w') as f:
@@ -94,7 +145,6 @@ def get_merged_df_with_stock_report(pivot, df_stock_report,stock_cols):
 
 
 def get_labour_sheet(df_list):
-
     file_list = get_consolidated_report(df_list)
     df = file_list[0].copy()
     df = df[df['Resource Type'].str.lower() == 'service']
@@ -107,6 +157,8 @@ def get_labour_sheet(df_list):
     estimated_amt_labour_summary_list = get_labour_amt_summary_list(df,"Est Amt")
     theoritical_amt_labour_summary_list = get_labour_amt_summary_list(df,"Theoritical Amt")
     actual_amt_labour_summary_list = get_labour_amt_summary_list(df,"Actual Amt")
+
+    print("Step 4: Compute summary")
 
     # Step 5: Prepare summary dataframe
     summary = pd.DataFrame({
@@ -122,22 +174,44 @@ def get_labour_sheet(df_list):
     'Actual Amount': actual_amt_labour_summary_list
     })
 
-    output_path_file = get_output_excel("labour_sheet",".xlsx")
+
+    output_path_file = get_output_excel("Labour_Report",".xlsx")
+
+    print("Step 5: Prepare summary dataframe")
 
     # Step 6: Remove unnecessary columns from dataframe
+    project_name = df['Project Name'].iloc[0] if 'Project Name' in df.columns else None
     columns_to_delete = ["Sr","Activity Code", "Project Name","Sub Project","Activity Unit", "3Total Qty","Key","Resource Type"]
     df = df.drop(columns=columns_to_delete)
 
-    # Step 8 : Add Actual Rate Column
-    df["Act Rate"] = (df["Actual Amt"] / df["Actual Qty"]).where(df["Actual Qty"] != 0, 0)
-    df["Balance Work Qty [Est - Th]"] = df["Est Amt"] - df["Theoritical Amt"]
+    #Step 9 : Rename cells as per business requirements
+    df = df.rename(columns={
+        'Theoritical Qty': 'DPR Work Qty',
+        'Actual Qty': 'SRN Billed Qty',
+        'Theoritical Amt': 'Theoritical Work Amt',
+        'Actual Amt' : 'SRN Amt'
+    })
 
-    # Step 6: Write output to Excel
+    # Step 10 : Add Actual Rate Column
+    df["Act Rate"] = (df["SRN Amt"] / df["SRN Billed Qty"]).where(df["SRN Billed Qty"] != 0, 0)
+    df["Balance Work Amt [Est - Th]"] = df["Est Amt"] - df["Theoritical Work Amt"]
+    df["Percentage Work Completed [DPR/Est]*100"] = ((df["DPR Work Qty"] / df["Est Qty"]).where(df["Est Qty"] != 0,0))*100
+    df["Work Amt"] = df["DPR Work Qty"]*df["Act Rate"]
+
+    # Step 11: Write output to Excel with formatting
+    start_row = START_ROW
     with pd.ExcelWriter(output_path_file, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Detailed Data')
-        summary.to_excel(writer, index=False, sheet_name='Summary')
+        df.to_excel(writer, index=False, sheet_name='Detailed Data',startrow=start_row)
+        summary.to_excel(writer, index=False, sheet_name='Summary',startrow=start_row)
 
+        # Extract project name from first row if available
+        # project_name = df['Project Name'].iloc[0] if 'Project Name' in df.columns else None
+
+        # Format both sheets
+        format_excel_with_headers(writer, 'Detailed Data', df, LABOUR_REPORT_TITLE, project_name)
+        format_excel_with_headers(writer, 'Summary', summary, LABOUR_SUMMARY_TITLE, project_name)
     print(f"✅ Labour report generated at {output_path_file}")
+    return output_path_file
 
 def get_material_sheet(df_list):
     '''
@@ -150,11 +224,11 @@ def get_material_sheet(df_list):
     df = file_list[0].copy()
     df = df[df['Resource Type'].str.lower() == 'material']
     df = clean_df(df)
-    df["Actual Rate"] = (df["Actual Amt"] / df["Actual Qty"]).where(df["Actual Qty"] != 0, 0)
+    # df["Actual Rate"] = (df["Actual Amt"] / df["Actual Qty"]).where(df["Actual Qty"] != 0, 0)
 
     # Step2: Perform Pivot Table Operation
     # Ensure numeric conversions
-    numeric_cols = ["Est Qty", "Est Rate", "Est Amt","Theoritical Qty","Actual Qty","Theoritical Amt","Actual Amt","Actual Rate"]
+    numeric_cols = ["Est Qty", "Est Rate", "Est Amt","Theoritical Qty","Actual Qty","Theoritical Amt","Actual Amt"]
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -169,7 +243,6 @@ def get_material_sheet(df_list):
             "Theoritical Qty": "sum",
             "Theoritical Amt": "sum",
             "Actual Qty": "sum",
-            "Actual Rate": "mean",
             "Actual Amt": "sum",
 
         },
@@ -180,7 +253,6 @@ def get_material_sheet(df_list):
             "Theoritical Qty": "sum",
             "Theoritical Amt": "sum",
             "Actual Qty": "sum",
-            "Actual Rate": "mean",
             "Actual Amt": "sum"
         },
         fill_value=0,
@@ -193,6 +265,8 @@ def get_material_sheet(df_list):
     pivot["Wastage %"] = (
             (pivot["Wastage"] / pivot["Theoritical Qty"]) * 100
     ).where(pivot["Theoritical Qty"] != 0, 0)  # Sets to 0 if Est Qty is 0
+
+    pivot["Actual Rate"] = (pivot["Actual Amt"] / pivot["Actual Qty"]).where(pivot["Actual Qty"]!=0,0)
 
     desired_columns_order = [
         "Item Group",
@@ -213,7 +287,7 @@ def get_material_sheet(df_list):
     stock_cols = []
     if len(file_list) > 2:
         df_stock_report = file_list[2].copy()
-        stock_cols = ['Stock Received Qty (B)', 'Project Transfer Qty (E)', 'Stock Issue Qty (D)', 'Closing Stock Qty (CG)']
+        stock_cols = ['Stock Received Qty (B)', 'Project Transfer Qty (E)', 'Stock Issue Qty (D)','Closing Stock Qty (CG)']
         pivot = get_merged_df_with_stock_report(pivot.copy(), df_stock_report,stock_cols)
         for col in stock_cols:
             pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)  # Convert to numeric, replace NaNs with 0
@@ -246,12 +320,13 @@ def get_material_sheet(df_list):
     # Sort alphabetically for neatness
     pivot = pivot.sort_values(by=["Item Group", "Item Desc"])
 
+    pivot["Actual - Tag Issue Qty Difference"] = pivot["Stock Issue Qty (D)"] - pivot["Actual Qty"]
     # Export to Excel
-    output_path = get_output_excel("Material Reconciliation",".xlsx")
+    output_path = get_output_excel("Material_Reconciliation_Report",".xlsx")
     pivot.to_excel(output_path, index=False)
     print(f"✅ Material Reconciliation Report generated: {output_path}")
 
-    return pivot
+    return output_path
 
 def get_activity_costing_report(df_list):
     '''
@@ -335,11 +410,11 @@ def get_activity_costing_report(df_list):
     #     pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)
     #     pivot[col] = pivot[col].round(2)
 
-    output_path = get_output_excel("Activity Costing Report",".xlsx")
+    output_path = get_output_excel("Activity_Costing_Report",".xlsx")
     pivot.to_excel(output_path, index=False)
     print(f"✅ Activity Costing Report generated: {output_path}")
 
-    return pivot
+    return output_path
 
 def excel_transform(df_list,transform_option):
     '''
@@ -348,56 +423,162 @@ def excel_transform(df_list,transform_option):
     :return:
     '''
 
-    if transform_option == "labour_sheet":
+    if transform_option == LABOUR_REPORT:
         return get_labour_sheet(df_list.copy())
-    elif transform_option == "material_sheet":
+    elif transform_option == MATERIAL_REPORT:
         return get_material_sheet(df_list.copy())
-    elif transform_option == "activity_costing_report":
+    elif transform_option == ACTIVITY_COSTING_REPORT:
         return get_activity_costing_report(df_list.copy())
-    elif transform_option == "all":
+    elif transform_option == ALL_REPORTS:
         ls = get_labour_sheet(df_list.copy())
         ms = get_material_sheet(df_list.copy())
         acs = get_activity_costing_report(df_list.copy())
-        return 0;
+        return f'{ls},\n{ms},\n{acs}';
     else:
         raise Exception("Invalid transform option!")
         return 0
 
-def get_df_from_files(files):
-    '''
-    :param files:
-    :return:
-    '''
-    pass
+# def get_df_from_files(files):
+#     '''
+#     :param files:
+#     :return:
+#     '''
+#     pass
 
-if __name__ == '__main__':
-    num_files = int(input("Enter the number of files:"))
-    print(f"You entered: {num_files}")
+# if __name__ == '__main__':
+#     num_files = int(input("Enter the number of files:"))
+#     print(f"You entered: {num_files}")
+#
+#     file_list = []
+#     for i in range(0,num_files):
+#         file_list.append(input(f'Enter file {i+1} : '))
+#     # --- Step 2: Read both Excel files ---
+#
+#     print("Reading Excel files...")
+#     try:
+#         df_list = [pd.read_excel(x,skiprows=1) for x in file_list]
+#     except:
+#         print("Files are invalid or not convertible to data frames. \n")
+#
+#     transform_option = input("Enter report type:\n")
+#     print(f"You entered: {transform_option}")
+#
+#     excel_transform(df_list,transform_option)
+#
+#     '''
+#     1. Consider that the two files are located in same folder as the python script.
+#     2. 1st Argument is excel file 1
+#     3. 2nd Argument is excel file 2
+#     4. We create a new column based on two columns in excel file 1
+#     5. We create same column in based on same two columns in excel file 2
+#     6. We do vlookup in excel to get an existing column "Resource Type" from excel_file_2 into excel_file_1.
+#     7. Now use transformed excel_file_1 to generate two reports.
+#     8. First report is generated by applying filter in Resource Type column of this transformed excel file 1
+#     9. Second report is generated by doing pivot, grouping and summmaring data.
+#     '''
 
-    file_list = []
-    for i in range(0,num_files):
-        file_list.append(input(f'Enter file {i+1} : '))
-    # --- Step 2: Read both Excel files ---
+# def browse_files():
+#     filenames = filedialog.askopenfilenames(
+#         title="Select Excel Files",
+#         filetypes=[("Excel files", "*.xlsx *.xls")]
+#     )
+#     file_list_box.delete(0, tk.END)
+#     for f in filenames:
+#         file_list_box.insert(tk.END, f)
 
-    print("Reading Excel files...")
+def open_output_folder(folder_path):
+    """Opens the folder where reports are saved."""
     try:
-        df_list = [pd.read_excel(x,skiprows=1) for x in file_list]
-    except:
-        print("Files are invalid or not convertible to data frames. \n")
+        if platform.system() == "Windows":
+            os.startfile(folder_path)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.Popen(["open", folder_path])
+        else:  # Linux
+            subprocess.Popen(["xdg-open", folder_path])
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not open folder:\n{e}")
 
-    transform_option = input("Enter report type:\n")
-    print(f"You entered: {transform_option}")
 
-    excel_transform(df_list,transform_option)
+def browse_files():
+    filenames = filedialog.askopenfilenames(
+        title="Select Excel Files in the following order: \n (1) Resource Reconciliation \n (2) Resource Requirement \n (3) Stock Report \n",
+        filetypes=[("Excel files", "*.xlsx *.xls")]
+    )
+    for f in filenames:
+        if f not in file_list_box.get(0, tk.END):  # avoid duplicates
+            file_list_box.insert(tk.END, f)
 
-    '''
-    1. Consider that the two files are located in same folder as the python script. 
-    2. 1st Argument is excel file 1
-    3. 2nd Argument is excel file 2
-    4. We create a new column based on two columns in excel file 1
-    5. We create same column in based on same two columns in excel file 2
-    6. We do vlookup in excel to get an existing column "Resource Type" from excel_file_2 into excel_file_1.
-    7. Now use transformed excel_file_1 to generate two reports.
-    8. First report is generated by applying filter in Resource Type column of this transformed excel file 1
-    9. Second report is generated by doing pivot, grouping and summmaring data.
-    '''
+def run_transformation():
+    try:
+        files = file_list_box.get(0, tk.END)
+        if not files:
+            messagebox.showerror("Error", "Please select at least one file.")
+            return
+
+        transform_option = report_type_var.get()
+        print(transform_option)
+        if not transform_option:
+            messagebox.showerror("Error", "Please select a report type.")
+            return
+
+        df_list = [pd.read_excel(x, skiprows=1) for x in files]
+        excel_transform(df_list, transform_option)
+        messagebox.showinfo("Success", f"Reports generated successfully with transformation option : '{transform_option}'")
+
+        # Automatically open the output folder
+        open_output_folder(os.getcwd())
+
+    except Exception as e:
+        print(e)
+        messagebox.showerror("Error", f"Something went wrong:\n{e}")
+
+def open_folder_button_action():
+    """Manual button to open output folder."""
+    open_output_folder(os.getcwd())
+
+# # --- GUI setup ---
+# root = tk.Tk()
+# root.title("Excel Report Transformer")
+# root.geometry("500x400")
+#
+# # Title
+# tk.Label(root, text="Excel Report Transformer", font=("Arial", 14, "bold")).pack(pady=10)
+#
+# # Dropdown for report type
+# tk.Label(root, text="Select Report Type:").pack(pady=5)
+# report_type_var = tk.StringVar()
+# report_dropdown = ttk.Combobox(root, textvariable=report_type_var, values=[
+#     MATERIAL_REPORT,
+#     LABOUR_REPORT,
+#     ACTIVITY_COSTING_REPORT,
+#     ALL_REPORTS
+# ])
+# report_dropdown.current(0)  # Show default
+# report_dropdown.pack(pady=5)
+#
+# #Description
+# instruction_text = (
+#     "Select Excel Files generated from ERP in the following order:\n"
+#     "  (1) Resource Reconciliation\n"
+#     "  (2) Resource Requirement\n"
+#     "  (3) Stock Report"
+# )
+# tk.Label(
+#     root,
+#     text=instruction_text,
+#     justify="left",
+#     font=("Arial", 14, "bold")
+# ).pack(pady=(5, 5))
+#
+# # File selection
+# tk.Button(root, text="Browse Excel Files", command=browse_files).pack(pady=5)
+# file_list_box = tk.Listbox(root, width=60, height=5)
+# file_list_box.pack(pady=5)
+#
+# # Run button
+# tk.Button(root, text="Generate Report", command=run_transformation, bg="#4CAF50", fg="black").pack(pady=20)
+#
+# # Open folder button
+# tk.Button(root, text="Open Output Folder", command=open_folder_button_action, bg="#2196F3", fg="white").pack(pady=5)
+#
+# root.mainloop()
