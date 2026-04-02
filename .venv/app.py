@@ -13,19 +13,30 @@ LABOUR_REPORT = "Labour Report"
 MATERIAL_REPORT = "Material Reconciliation Report"
 ACTIVITY_COSTING_REPORT = "Activity Wise Costing Report"
 ALL_REPORTS = "All of the above"
+MULTIPLE_COST_REPORTS = "Multiple Projects - Cost Reports"
+MONTHWISE_SITEWISE_LABOUR_QTY_REPORT = "Monthwise Sitewise Labour Quantity Report"
+FUND_REPORT = "Fund Report"
+THEORITICAL_CONSUMPTION_SHEET = "Theoritical Consumption Sheet"
+
 SELECT_REPORT_TYPE_TEXT = "-- Select Report Type --"
+
 INPUT_REQ_DIR = {
 SELECT_REPORT_TYPE_TEXT : "",
 LABOUR_REPORT: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n",
 MATERIAL_REPORT: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n (3) Stock Report",
 ACTIVITY_COSTING_REPORT: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n (3) Stock Report",
-ALL_REPORTS: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n (3) Stock Report"
+ALL_REPORTS: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n (3) Stock Report",
+MULTIPLE_COST_REPORTS: "Select Excel Files in the following order for multiple projects :\n (1) Resource Reconciliation\n (2) Resource Requirement\n (3) Stock Report",
+MONTHWISE_SITEWISE_LABOUR_QTY_REPORT: "Select Excel Files in the following order:\n (1) SRN Report",
+FUND_REPORT: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n",
+THEORITICAL_CONSUMPTION_SHEET: "Select Excel Files in the following order:\n (1) Resource Reconciliation\n (2) Resource Requirement\n"
 }
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.num_files = 3 # by default num_files= 3; if multiple cost reports then num_files = n
         self.title("Excel Report Transformer")
         self.geometry("600x400")
 
@@ -58,7 +69,14 @@ class ReportTypePage(tk.Frame):
 
         ttk.Label(self, text="Choose report type to generate:").pack(pady=5)
         combo = ttk.Combobox(self, textvariable=controller.report_type, state="readonly")
-        combo['values'] = ["-- Select Report Type --",LABOUR_REPORT, MATERIAL_REPORT,ACTIVITY_COSTING_REPORT,ALL_REPORTS]
+        combo['values'] = ["-- Select Report Type --",LABOUR_REPORT,
+                           MATERIAL_REPORT,
+                           ACTIVITY_COSTING_REPORT,
+                           ALL_REPORTS,
+                           MULTIPLE_COST_REPORTS,
+                           MONTHWISE_SITEWISE_LABOUR_QTY_REPORT,
+                           FUND_REPORT,
+                           THEORITICAL_CONSUMPTION_SHEET]
         combo.current(0)
         combo.pack(pady=5)
 
@@ -108,7 +126,7 @@ class FileSelectPage(tk.Frame):
         self.controller.selected_files = files
         for i, path in enumerate(files):
             name = os.path.basename(path)
-            if i < len(files):
+            if i < len(files) and i < 3:
                 self.file_labels[i].config(text=f"File {i + 1}: {name}")
 
     def next_page(self):

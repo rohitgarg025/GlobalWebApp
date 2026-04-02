@@ -4,8 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="lgtm activity, material, labour sheet">
+    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="Updated Labour &amp; Material Report, added formatting">
+      <change beforePath="$PROJECT_DIR$/.idea/GlobalWebApp.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/GlobalWebApp.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.venv/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/app.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.venv/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/.venv/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -45,16 +48,17 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.app.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python.app.executor": "Run",
+    "Python.main.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/Users/rohit/Documents/2. code-projects/GlobalWebApp2",
+    "settings.editor.selected.configurable": "preferences.pluginManager"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/.venv" />
@@ -184,7 +188,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759969014951</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="Updated Labour &amp; Material Report, added formatting">
+      <option name="closed" value="true" />
+      <created>1770450208263</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1770450208263</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -231,6 +243,7 @@
     <MESSAGE value="main files" />
     <MESSAGE value="added material (without stock report merge) and labour sheet logic" />
     <MESSAGE value="lgtm activity, material, labour sheet" />
-    <option name="LAST_COMMIT_MESSAGE" value="lgtm activity, material, labour sheet" />
+    <MESSAGE value="Updated Labour &amp; Material Report, added formatting" />
+    <option name="LAST_COMMIT_MESSAGE" value="Updated Labour &amp; Material Report, added formatting" />
   </component>
 </project>

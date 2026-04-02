@@ -5,10 +5,13 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import pandas as pd
+import time
 
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 START_ROW = 3
+SKIP_ROWS_IF_PIVOT_REPORT = 1
+SKIP_ROWS_IF_CUSTOM_REPORT = 5
 LABOUR_REPORT_TITLE = "Labour Costing Report"
 LABOUR_SUMMARY_TITLE = 'Labour Costing Summary'
 
@@ -54,13 +57,18 @@ LABOUR_REPORT = "Labour Report"
 MATERIAL_REPORT = "Material Reconciliation Report"
 ACTIVITY_COSTING_REPORT = "Activity Wise Costing Report"
 ALL_REPORTS = "All of the above"
-def get_output_excel(base_filename, file_extension):
+MULTIPLE_COST_REPORTS = "Multiple Projects - Cost Reports"
+MONTHWISE_SITEWISE_LABOUR_QTY_REPORT = "Monthwise Sitewise Labour Quantity Report"
+
+def get_output_excel(project_name, base_filename, file_extension):
     '''
+    :param project_name: 'project name extracted from erp report'
     :param base_filename: 'output report_name'
     :param file_extension: '.excel'
     :return:
     '''
     # Get the current datetime object
+    project_name = project_name.lower().replace(' ', '_')
     now = datetime.now()
 
     # Format the datetime object into a string timestamp
@@ -68,7 +76,7 @@ def get_output_excel(base_filename, file_extension):
     timestamp = now.strftime('%Y%m%d_%H%M%S')
 
     # Construct the new filename with the timestamp
-    new_filename = f"{base_filename}_{timestamp}{file_extension}"
+    new_filename = f"{project_name}_{base_filename}_{timestamp}{file_extension}"
 
     return f"{new_filename}"
 
@@ -142,6 +150,9 @@ def get_merged_df_with_stock_report(pivot, df_stock_report,stock_cols):
     pivot = pivot.merge(df_stock_report[['Item Desc'] + stock_cols ], on='Item Desc', how='left')
     return pivot
 
+def get_monthwise_labour_sheet(df_list):
+    file1 = df_list[0].copy()
+
 
 
 def get_labour_sheet(df_list):
@@ -174,9 +185,6 @@ def get_labour_sheet(df_list):
     'Actual Amount': actual_amt_labour_summary_list
     })
 
-
-    output_path_file = get_output_excel("Labour_Report",".xlsx")
-
     print("Step 5: Prepare summary dataframe")
 
     # Step 6: Remove unnecessary columns from dataframe
@@ -199,6 +207,7 @@ def get_labour_sheet(df_list):
     df["Work Amt"] = df["DPR Work Qty"]*df["Act Rate"]
 
     # Step 11: Write output to Excel with formatting
+    output_path_file = get_output_excel(project_name,"Labour_Report", ".xlsx")
     start_row = START_ROW
     with pd.ExcelWriter(output_path_file, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Detailed Data',startrow=start_row)
@@ -224,6 +233,7 @@ def get_material_sheet(df_list):
     df = file_list[0].copy()
     df = df[df['Resource Type'].str.lower() == 'material']
     df = clean_df(df)
+    project_name = df['Project Name'].iloc[0] if 'Project Name' in df.columns else None
     # df["Actual Rate"] = (df["Actual Amt"] / df["Actual Qty"]).where(df["Actual Qty"] != 0, 0)
 
     # Step2: Perform Pivot Table Operation
@@ -322,7 +332,7 @@ def get_material_sheet(df_list):
 
     pivot["Actual - Tag Issue Qty Difference"] = pivot["Stock Issue Qty (D)"] - pivot["Actual Qty"]
     # Export to Excel
-    output_path = get_output_excel("Material_Reconciliation_Report",".xlsx")
+    output_path = get_output_excel(project_name,"Material_Reconciliation_Report",".xlsx")
     pivot.to_excel(output_path, index=False)
     print(f"✅ Material Reconciliation Report generated: {output_path}")
 
@@ -338,6 +348,7 @@ def get_activity_costing_report(df_list):
     file_list = get_consolidated_report(df_list)
     df = file_list[0].copy()
     df = clean_df(df)
+    project_name = df['Project Name'].iloc[0] if 'Project Name' in df.columns else None
 
     # Step2: Apply Pivot to get activity wise costing
     # Ensure numeric conversions
@@ -410,12 +421,14 @@ def get_activity_costing_report(df_list):
     #     pivot[col] = pd.to_numeric(pivot[col], errors='coerce').fillna(0)
     #     pivot[col] = pivot[col].round(2)
 
-    output_path = get_output_excel("Activity_Costing_Report",".xlsx")
+    output_path = get_output_excel(project_name,"Activity_Costing_Report",".xlsx")
     pivot.to_excel(output_path, index=False)
     print(f"✅ Activity Costing Report generated: {output_path}")
 
     return output_path
 
+def get_fund_report(df_list):
+    pass
 def excel_transform(df_list,transform_option):
     '''
     :param df_list:
@@ -430,13 +443,33 @@ def excel_transform(df_list,transform_option):
     elif transform_option == ACTIVITY_COSTING_REPORT:
         return get_activity_costing_report(df_list.copy())
     elif transform_option == ALL_REPORTS:
-        ls = get_labour_sheet(df_list.copy())
-        ms = get_material_sheet(df_list.copy())
-        acs = get_activity_costing_report(df_list.copy())
-        return f'{ls},\n{ms},\n{acs}';
+        return get_all_reports_single_project(df_list)
+    elif transform_option == MULTIPLE_COST_REPORTS:
+        multi_project_sheet_list = get_multi_project_list(df_list.copy())
+        output_files_string = ''
+        for i in multi_project_sheet_list:
+            output_files_string = output_files_string +  get_all_reports_single_project(i.copy())
+            time.sleep(1)
+        return output_files_string + '\n'
+
     else:
         raise Exception("Invalid transform option!")
         return 0
+
+
+def get_all_reports_single_project(df_list):
+    ls = get_labour_sheet(df_list.copy())
+    ms = get_material_sheet(df_list.copy())
+    acs = get_activity_costing_report(df_list.copy())
+    return f'{ls},\n{ms},\n{acs}';
+
+def get_multi_project_list(df_list):
+    '''
+    :param df_list:
+    :return: list of triads {resource_reconciliation_i, resource_requirement_i, stock_report_i}
+    '''
+    return [df_list[i:i + 3] for i in range(0, len(df_list), 3)]
+
 
 # def get_df_from_files(files):
 #     '''
@@ -521,7 +554,8 @@ def run_transformation():
             messagebox.showerror("Error", "Please select a report type.")
             return
 
-        df_list = [pd.read_excel(x, skiprows=1) for x in files]
+        skrows = SKIP_ROWS_IF_PIVOT_REPORT # TODO: I will get back to this
+        df_list = [pd.read_excel(x, skiprows=skrows) for x in files]
         excel_transform(df_list, transform_option)
         messagebox.showinfo("Success", f"Reports generated successfully with transformation option : '{transform_option}'")
 
