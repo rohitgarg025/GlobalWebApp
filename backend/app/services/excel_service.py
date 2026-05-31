@@ -2,7 +2,7 @@ import os
 import uuid
 import asyncio
 import shutil
-import tempfile
+import time
 from pathlib import Path
 from typing import List
 from io import BytesIO
@@ -20,10 +20,22 @@ REPORT_TYPE_MAP = {
     "multiple_cost_reports": "Multiple Projects - Cost Reports",
 }
 
-# In-memory job registry: {job_id: {file_id: absolute_path}}
-_job_registry: dict[str, dict[str, str]] = {}
+JOB_TTL_SECONDS = 3600  # 1 hour
 
 TEMP_BASE = Path(__file__).parent.parent.parent / "temp"
+
+# In-memory job registry: {job_id: {"files": {file_id: path}, "created_at": timestamp}}
+_job_registry: dict[str, dict] = {}
+
+
+def _evict_expired_jobs() -> None:
+    now = time.time()
+    expired = [jid for jid, meta in _job_registry.items() if now - meta["created_at"] > JOB_TTL_SECONDS]
+    for jid in expired:
+        job_output_dir = TEMP_BASE / "outputs" / jid
+        if job_output_dir.exists():
+            shutil.rmtree(job_output_dir, ignore_errors=True)
+        del _job_registry[jid]
 
 
 def get_report_label(filename: str) -> str:
@@ -58,6 +70,8 @@ async def generate_report(
         _run_transform, file_bytes_list, transform_option, str(job_output_dir)
     )
 
+    _evict_expired_jobs()
+
     file_registry: dict[str, str] = {}
     output_file_infos = []
 
@@ -74,7 +88,7 @@ async def generate_report(
             "report_label": get_report_label(filename),
         })
 
-    _job_registry[job_id] = file_registry
+    _job_registry[job_id] = {"files": file_registry, "created_at": time.time()}
     return job_id, output_file_infos
 
 
@@ -95,9 +109,9 @@ def _run_transform(
 
 def get_file_path(file_id: str) -> str | None:
     """Look up an output file path by file_id across all jobs."""
-    for job_files in _job_registry.values():
-        if file_id in job_files:
-            path = job_files[file_id]
+    for meta in _job_registry.values():
+        if file_id in meta["files"]:
+            path = meta["files"][file_id]
             return path if os.path.exists(path) else None
     return None
 
