@@ -50,6 +50,13 @@ final List<NavSection> appNavSections = [
         activeIcon: Icons.assessment,
       ),
       NavDestination(
+        id: 'quantity_sheet',
+        label: 'Quantity Sheet',
+        icon: Icons.grid_on_outlined,
+        activeIcon: Icons.grid_on,
+        badge: 'New',
+      ),
+      NavDestination(
         id: 'project_tracker',
         label: 'Project Tracker',
         icon: Icons.construction_outlined,

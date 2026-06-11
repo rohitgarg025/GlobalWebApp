@@ -4,6 +4,7 @@ import 'nav_destination.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/coming_soon_screen.dart';
 import '../screens/report_transformer/step1_report_type_screen.dart';
+import '../screens/quantity_sheet/qs_home_screen.dart';
 
 /// Breakpoint below which the sidebar collapses into a hamburger drawer.
 const double _kSidebarBreakpoint = 720;
@@ -28,8 +29,9 @@ class _AppShellState extends State<AppShell> {
           onNavigate: (id) => setState(() => _activeId = id),
         );
       case 'report_transformer':
-        // Each visit starts fresh at Step 1
         return const Step1ReportTypeScreen();
+      case 'quantity_sheet':
+        return const QsHomeScreen();
       default:
         // All "coming soon" modules
         final dest = appNavSections

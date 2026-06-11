@@ -18,6 +18,7 @@ REPORT_TYPE_MAP = {
     "activity_costing_report": "Activity Wise Costing Report",
     "all_reports": "All of the above",
     "multiple_cost_reports": "Multiple Projects - Cost Reports",
+    "theoretical_consumption_report": "Theoretical Consumption Report",
 }
 
 JOB_TTL_SECONDS = 3600  # 1 hour
@@ -46,6 +47,8 @@ def get_report_label(filename: str) -> str:
         return "Material Reconciliation Report"
     if "activity" in name:
         return "Activity Wise Costing Report"
+    if "theoretical" in name:
+        return "Theoretical Consumption Report"
     return "Report"
 
 

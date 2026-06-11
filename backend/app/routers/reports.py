@@ -35,6 +35,13 @@ REPORT_TYPES = [
         input_file_labels=["Resource Reconciliation", "Resource Requirement", "Stock Report"],
     ),
     ReportTypeInfo(
+        id="theoretical_consumption_report",
+        display_name="Theoretical Consumption Report",
+        description="Select files in order: (1) Resource Reconciliation  (2) Resource Requirement",
+        required_files_count=2,
+        input_file_labels=["Resource Reconciliation", "Resource Requirement"],
+    ),
+    ReportTypeInfo(
         id="all_reports",
         display_name="All Reports (Labour + Material + Activity)",
         description="Generates all 3 reports. Select files in order: (1) Resource Reconciliation  (2) Resource Requirement  (3) Stock Report",
