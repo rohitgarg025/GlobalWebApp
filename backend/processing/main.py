@@ -18,7 +18,8 @@ ACTIVITY_COSTING_REPORT = "Activity Wise Costing Report"
 ALL_REPORTS = "All of the above"
 MULTIPLE_COST_REPORTS = "Multiple Projects - Cost Reports"
 MONTHWISE_SITEWISE_LABOUR_QTY_REPORT = "Monthwise Sitewise Labour Quantity Report"
-
+THEORETICAL_CONSUMPTION_REPORT = "Theoretical Consumption Report"
+FUND_REPORT = "Fund Report"
 
 def format_excel_with_headers(writer, sheet_name, df, report_title, project_name=None):
     workbook = writer.book
@@ -303,6 +304,8 @@ def excel_transform(df_list, transform_option, output_dir=""):
         return [get_activity_costing_report(df_list, output_dir)]
     elif transform_option == ALL_REPORTS:
         return get_all_reports_single_project(df_list, output_dir)
+    elif transform_option == THEORETICAL_CONSUMPTION_REPORT:
+        return [theoretical_consumption_sheet(df_list, output_dir)]
     elif transform_option == MULTIPLE_COST_REPORTS:
         multi_project_sheet_list = get_multi_project_list(df_list)
         all_outputs = []
@@ -312,3 +315,85 @@ def excel_transform(df_list, transform_option, output_dir=""):
         return all_outputs
     else:
         raise ValueError(f"Invalid transform option: {transform_option}")
+
+
+def theoretical_consumption_sheet(df_list, output_dir=""):
+    file_list = get_consolidated_report(df_list)
+    df = file_list[0].copy()
+    df = df[df['Resource Type'].str.lower() == 'material']
+    df = clean_df(df)
+    # Some ERP exports prefix the activity total with "3" like the other qty columns
+    df = df.rename(columns={"3Total Qty": "Total Qty"})
+    project_name = df['Project Name'].iloc[0] if 'Project Name' in df.columns else None
+
+    numeric_cols = ["Total Qty", "Est Qty", "Theoritical Qty"]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Resource Coefficient = material qty estimated per unit of activity
+    df["Resource Coefficient"] = (df["Est Qty"] / df["Total Qty"]).where(df["Total Qty"] != 0, 0)
+
+    desired_columns_order = [
+        "Activity Name", "Activity Unit", "Total Qty",
+        "Item Group", "Item Desc", "Resource Coefficient",
+        "Resource Unit", "Est Qty", "Theoritical Qty",
+    ]
+    df = df.reindex(columns=desired_columns_order)
+
+    df = df.sort_values(by=["Activity Name", "Item Group"]).reset_index(drop=True)
+
+    for col in ["Total Qty", "Est Qty", "Theoritical Qty"]:
+        df[col] = df[col].round(2)
+    df["Resource Coefficient"] = df["Resource Coefficient"].round(6)
+
+    sheet_name = 'Theoretical Consumption'
+    output_path_file = get_output_excel(project_name, "Theoretical_Consumption_Report", ".xlsx", output_dir)
+
+    with pd.ExcelWriter(output_path_file, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=START_ROW)
+        format_excel_with_headers(writer, sheet_name, df, THEORETICAL_CONSUMPTION_REPORT, project_name)
+
+        worksheet = writer.sheets[sheet_name]
+
+        # Detail data occupies rows first_data_row .. last_data_row (1-indexed);
+        # to_excel(startrow=START_ROW) puts the header on excel row START_ROW+1.
+        first_data_row = START_ROW + 2
+        last_data_row = first_data_row + len(df) - 1
+        item_desc_col = get_column_letter(df.columns.get_loc("Item Desc") + 1)
+        th_qty_col = get_column_letter(df.columns.get_loc("Theoritical Qty") + 1)
+        criteria_range = f"${item_desc_col}${first_data_row}:${item_desc_col}${last_data_row}"
+        sum_range = f"${th_qty_col}${first_data_row}:${th_qty_col}${last_data_row}"
+
+        # ── Material-wise summary (two blank rows below the detail table) ──────
+        summary_start = last_data_row + 3
+
+        title_cell = worksheet.cell(row=summary_start, column=1)
+        title_cell.value = 'Material Wise Theoretical Consumption Summary'
+        title_cell.font = Font(name='Arial', size=12, bold=True)
+
+        header_row = summary_start + 1
+        summary_headers = ['Item Desc', 'Resource Unit', 'Total Theoritical Qty']
+        header_fill = PatternFill(start_color='0066CC', end_color='0066CC', fill_type='solid')
+        header_font = Font(name='Arial', size=10, bold=True, color='FFFFFF')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        for col_idx, header in enumerate(summary_headers, start=1):
+            cell = worksheet.cell(row=header_row, column=col_idx)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+
+        # One summary row per material with a live =SUMIF formula; the criteria
+        # references the Item Desc cell of the summary row itself, so clicking
+        # the total in Excel highlights the detail ranges it draws from.
+        write_row = header_row + 1
+        for item_desc, group in df.groupby("Item Desc", sort=True):
+            worksheet.cell(row=write_row, column=1).value = item_desc
+            worksheet.cell(row=write_row, column=2).value = group["Resource Unit"].iloc[0]
+            worksheet.cell(row=write_row, column=3).value = (
+                f"=SUMIF({criteria_range},A{write_row},{sum_range})"
+            )
+            write_row += 1
+
+    print(f"Theoretical Consumption Report generated: {output_path_file}")
+    return output_path_file

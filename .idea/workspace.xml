@@ -4,11 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="added dockerfile for deployment">
+    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="added quantity sheet + theoritical consumption logic">
       <change beforePath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/app/main_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/main_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/routers/reports.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routers/reports.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/app/services/excel_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/excel_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/processing/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/processing/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/layout/app_shell.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/layout/app_shell.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/layout/nav_destination.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/layout/nav_destination.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,19 +52,19 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.app.executor": "Run",
-    "Python.main.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "dart.analysis.tool.window.visible": "false",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "/Users/rohit/Documents/2. code-projects/GlobalWebApp2",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "show.migrate.to.gradle.popup": "false"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.app.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/rohit/Documents/2. code-projects/GlobalWebApp2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/.venv" />
@@ -213,7 +218,15 @@
       <option name="project" value="LOCAL" />
       <updated>1775811328859</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="added fly deployment support">
+      <option name="closed" value="true" />
+      <created>1780262916220</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1780262916220</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -263,6 +276,9 @@
     <MESSAGE value="Updated Labour &amp; Material Report, added formatting" />
     <MESSAGE value="Added flutter + fast api migration + flow changes" />
     <MESSAGE value="added dockerfile for deployment" />
-    <option name="LAST_COMMIT_MESSAGE" value="added dockerfile for deployment" />
+    <MESSAGE value="added fly deployment support" />
+    <MESSAGE value="ok" />
+    <MESSAGE value="added quantity sheet + theoritical consumption logic" />
+    <option name="LAST_COMMIT_MESSAGE" value="added quantity sheet + theoritical consumption logic" />
   </component>
 </project>

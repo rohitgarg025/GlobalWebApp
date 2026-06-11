@@ -6,12 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.reports import router
+from app.routers.quantity_sheet import router as qs_router
+from app.db.database import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     base = Path(__file__).parent.parent / "temp"
     (base / "outputs").mkdir(parents=True, exist_ok=True)
+    init_db()
     yield
 
 
@@ -34,3 +37,4 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(qs_router)
