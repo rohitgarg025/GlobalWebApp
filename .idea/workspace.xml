@@ -4,12 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="added quantity sheet + theoritical consumption logic">
+    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="mod service">
       <change beforePath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routers/reports.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routers/reports.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/services/excel_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/excel_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/processing/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/processing/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -230,7 +226,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781175612482</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="mod service">
+      <option name="closed" value="true" />
+      <created>1783922473103</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1783922473103</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -283,6 +287,7 @@
     <MESSAGE value="added fly deployment support" />
     <MESSAGE value="ok" />
     <MESSAGE value="added quantity sheet + theoritical consumption logic" />
-    <option name="LAST_COMMIT_MESSAGE" value="added quantity sheet + theoritical consumption logic" />
+    <MESSAGE value="mod service" />
+    <option name="LAST_COMMIT_MESSAGE" value="mod service" />
   </component>
 </project>
