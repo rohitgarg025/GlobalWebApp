@@ -19,7 +19,14 @@ REPORT_TYPE_MAP = {
     "all_reports": "All of the above",
     "multiple_cost_reports": "Multiple Projects - Cost Reports",
     "theoretical_consumption_report": "Theoretical Consumption Report",
+    "fund_report": "Fund Report",
+    "bill_master_report": "Bill Master Report",
+    "monthly_projectwise_labour_report": "Monthly Projectwise Labour Report",
 }
+
+# Report types whose input files are read raw (header=None) so the processing
+# function can locate the header row itself (e.g. SRN exports with a preamble).
+RAW_READ_OPTIONS = {"Bill Master Report", "Monthly Projectwise Labour Report"}
 
 JOB_TTL_SECONDS = 3600  # 1 hour
 
@@ -49,6 +56,12 @@ def get_report_label(filename: str) -> str:
         return "Activity Wise Costing Report"
     if "theoretical" in name:
         return "Theoretical Consumption Report"
+    if "fund" in name:
+        return "Fund Report"
+    if "bill_master" in name:
+        return "Bill Master Report"
+    if "monthly_projectwise" in name:
+        return "Monthly Projectwise Labour Report"
     return "Report"
 
 
@@ -104,7 +117,10 @@ def _run_transform(
     df_list = []
     for filename, content in file_bytes_list:
         buf = BytesIO(content)
-        df = pd.read_excel(buf, skiprows=1)
+        if transform_option in RAW_READ_OPTIONS:
+            df = pd.read_excel(buf, header=None)
+        else:
+            df = pd.read_excel(buf, skiprows=1)
         df_list.append(df)
 
     return excel_transform(df_list, transform_option, output_dir)
