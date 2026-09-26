@@ -360,8 +360,7 @@ class _HindranceCard extends StatelessWidget {
                 if (h.startDate != null) _Detail('From', _fmtDate(h.startDate!)),
                 if (h.endDate != null) _Detail('To', _fmtDate(h.endDate!)),
                 if (h.delayDays != null) _Detail('Delay', '${h.delayDays} day(s)'),
-                if (h.activityCode != null)
-                  _Detail('Activity', '${h.activityCode} – ${h.activityName ?? ''}'),
+                if (h.activityName != null) _Detail('Activity', h.activityName!),
                 if (h.raisedBy != null) _Detail('By', h.raisedBy!),
               ],
             ),
@@ -651,7 +650,7 @@ class _HindranceDialogState extends State<_HindranceDialog> {
                           ...widget.activityOptions.map((a) =>
                               DropdownMenuItem<int?>(
                                   value: a.id,
-                                  child: Text('${a.code} – ${a.name}',
+                                  child: Text(a.name,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(fontSize: 13)))),
                         ],

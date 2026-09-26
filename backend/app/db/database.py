@@ -71,6 +71,11 @@ def _migrate_pm_activities() -> None:
         for name, ddl in wanted.items():
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE pm_activities ADD COLUMN {name} {ddl}"))
+        # COD is system-generated and unique per project; enforce it in the DB too.
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_pm_activities_project_code "
+            "ON pm_activities(project_id, code)"
+        ))
 
 
 def _seed_roles() -> None:

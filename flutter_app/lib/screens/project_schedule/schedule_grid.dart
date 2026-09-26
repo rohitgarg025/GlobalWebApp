@@ -9,8 +9,7 @@ class _Col {
 }
 
 const _cType = _Col('TYPE', 86);
-const _cName = _Col('NAME', 230);
-const _cCode = _Col('COD', 84);
+const _cName = _Col('NAME', 280);
 const _cFloor = _Col('FLOOR', 96);
 const _cDays = _Col('DAYS', 58);
 const _cStart = _Col('START', 104);
@@ -22,10 +21,13 @@ const _cUnit = _Col('UNIT', 62);
 const _cActions = _Col('', 132);
 
 const _kCols = [
-  _cType, _cName, _cCode, _cFloor, _cDays, _cStart, _cFinish,
+  _cType, _cFloor, _cName, _cDays, _cStart, _cFinish,
   _cPred, _cLag, _cQty, _cUnit, _cActions,
 ];
 final double _kGridWidth = _kCols.fold(0.0, (w, c) => w + c.width);
+
+/// Left edge of the Name column (everything before it in [_kCols]).
+final double _kNameLeft = _cType.width + _cFloor.width;
 
 /// One visible line of the schedule tree.
 class _Row {
@@ -42,7 +44,6 @@ class _Row {
 class _Draft {
   final String rowType;
   final String name;
-  final String code;
   final int? floorId;
   final int? days;
   final DateTime? start;
@@ -54,7 +55,6 @@ class _Draft {
   const _Draft({
     required this.rowType,
     required this.name,
-    required this.code,
     this.floorId,
     this.days,
     this.start,
@@ -66,6 +66,11 @@ class _Draft {
 
   bool get isGroup => rowType == 'group';
 }
+
+/// How an activity is identified to users (COD is internal-only): name, plus
+/// floor so same-named activities on different floors stay distinguishable.
+String _activityLabel(PmActivity a) =>
+    a.floorName == null ? a.name : '${a.name} · ${a.floorName}';
 
 String _fmtDate(String iso) {
   final d = DateTime.tryParse(iso);
@@ -134,9 +139,12 @@ BoxDecoration _rowDecoration(Color bg) => BoxDecoration(
 
 // ─── Read-only row ────────────────────────────────────────────────────────────
 
+/// What a row shows while another row is dragged over it.
+enum _DropIndicator { none, before, after, invalid }
+
 class _ActivityRow extends StatefulWidget {
   final _Row row;
-  final String? predecessorCode;
+  final String? predecessorLabel;
   final bool collapsed;
   final VoidCallback onToggleCollapse;
   final VoidCallback onEdit;
@@ -144,16 +152,35 @@ class _ActivityRow extends StatefulWidget {
   final VoidCallback? onIndent;
   final VoidCallback? onOutdent;
 
+  /// Groups only: opens an entry row inside this group.
+  final VoidCallback? onAddChild;
+
+  /// Drag handle (a Draggable built by the screen, which owns the drop rules).
+  final Widget dragHandle;
+
+  final _DropIndicator indicator;
+
+  /// Indent level for the insertion line (the level the row will land at).
+  final int indicatorDepth;
+
+  /// True while this row is the one being dragged.
+  final bool isDragSource;
+
   const _ActivityRow({
     super.key,
     required this.row,
-    required this.predecessorCode,
+    required this.predecessorLabel,
     required this.collapsed,
     required this.onToggleCollapse,
     required this.onEdit,
     required this.onDelete,
     required this.onIndent,
     required this.onOutdent,
+    required this.dragHandle,
+    this.indicator = _DropIndicator.none,
+    this.indicatorDepth = 0,
+    this.isDragSource = false,
+    this.onAddChild,
   });
 
   @override
@@ -172,17 +199,31 @@ class _ActivityRowState extends State<_ActivityRow> {
         : (g ? const Color(0xFFF3F5F9) : Colors.white);
     final muted = TextStyle(fontSize: 12, color: Colors.black54, fontWeight: g ? FontWeight.w600 : null);
 
+    final lineLeft = _kNameLeft + 4 + widget.indicatorDepth * 16.0;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onDoubleTap: widget.onEdit,
-        child: Container(
+        child: Stack(
+          children: [
+            Opacity(
+              opacity: widget.isDragSource ? 0.35 : 1,
+              child: Container(
           height: _kRowH,
           decoration: _rowDecoration(bg),
           child: Row(
             children: [
-              _cell(_cType, _TypeChip(isGroup: g)),
+              SizedBox(
+                width: _cType.width,
+                child: Row(
+                  children: [
+                    widget.dragHandle,
+                    _TypeChip(isGroup: g),
+                  ],
+                ),
+              ),
+              _text(_cFloor, a.floorName ?? '', muted),
               SizedBox(
                 width: _cName.width,
                 child: Padding(
@@ -212,12 +253,10 @@ class _ActivityRowState extends State<_ActivityRow> {
                   ),
                 ),
               ),
-              _text(_cCode, a.code, muted),
-              _text(_cFloor, a.floorName ?? '', muted),
               _text(_cDays, !widget.row.hasDates ? '' : '${a.durationDays}d', muted),
               _text(_cStart, !widget.row.hasDates ? '' : _fmtDate(a.startDate), muted),
               _text(_cFinish, !widget.row.hasDates ? '' : _fmtDate(a.finishDate), muted),
-              _text(_cPred, widget.predecessorCode ?? '', muted),
+              _text(_cPred, widget.predecessorLabel ?? '', muted),
               _text(_cLag, a.predecessorId != null ? '${a.lagDays}d' : '', muted),
               _text(_cQty, a.quantity?.toString() ?? '', muted),
               _text(_cUnit, a.unit ?? '', muted),
@@ -235,6 +274,12 @@ class _ActivityRowState extends State<_ActivityRow> {
                               icon: Icons.format_indent_increase,
                               tooltip: 'Indent (move into group above)',
                               onTap: widget.onIndent),
+                          if (g)
+                            _IconBtn(
+                                icon: Icons.playlist_add,
+                                tooltip: 'Add activity in this group',
+                                color: _kBrand,
+                                onTap: widget.onAddChild),
                           _IconBtn(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: widget.onEdit),
                           _IconBtn(
                               icon: Icons.delete_outline,
@@ -247,6 +292,72 @@ class _ActivityRowState extends State<_ActivityRow> {
               ),
             ],
           ),
+        ),
+            ),
+            if (widget.indicator == _DropIndicator.before ||
+                widget.indicator == _DropIndicator.after)
+              Positioned(
+                left: lineLeft,
+                right: 0,
+                top: widget.indicator == _DropIndicator.before ? 0 : null,
+                bottom: widget.indicator == _DropIndicator.after ? 0 : null,
+                child: IgnorePointer(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _kBrand, width: 2),
+                          color: Colors.white,
+                        ),
+                      ),
+                      Expanded(child: Container(height: 2.5, color: _kBrand)),
+                    ],
+                  ),
+                ),
+              ),
+            if (widget.indicator == _DropIndicator.invalid) ...[
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _kError.withValues(alpha: 0.07),
+                      border: Border.all(color: _kError, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: _kNameLeft + _cName.width - 172,
+                top: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: _kError),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.block, size: 12, color: _kError),
+                          SizedBox(width: 4),
+                          Text("Can't move here",
+                              style: TextStyle(
+                                  fontSize: 10, color: _kError, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -294,9 +405,13 @@ class _EditableRow extends StatefulWidget {
   final Future<bool> Function(_Draft draft) onSubmit;
   final VoidCallback? onCancel;
 
+  /// Set when the row was opened from a group's "add activity" action.
+  final String? groupName;
+
   const _EditableRow({
     super.key,
     this.existing,
+    this.groupName,
     required this.depth,
     required this.activities,
     required this.floors,
@@ -311,7 +426,6 @@ class _EditableRow extends StatefulWidget {
 class _EditableRowState extends State<_EditableRow> {
   final _nameFocus = FocusNode();
   final _name = TextEditingController();
-  final _code = TextEditingController();
   final _days = TextEditingController();
   final _start = TextEditingController();
   final _lag = TextEditingController();
@@ -333,7 +447,6 @@ class _EditableRowState extends State<_EditableRow> {
     if (e != null) {
       _type = e.rowType;
       _name.text = e.name;
-      _code.text = e.code;
       _floorId = e.floorId;
       _days.text = '${e.durationDays}';
       _start.text = _fmtDate(e.startDate);
@@ -341,13 +454,17 @@ class _EditableRowState extends State<_EditableRow> {
       _lag.text = e.lagDays == 0 ? '' : '${e.lagDays}';
       _qty.text = e.quantity?.toString() ?? '';
       _unit.text = e.unit ?? '';
-      WidgetsBinding.instance.addPostFrameCallback((_) => _nameFocus.requestFocus());
+    }
+    if (e != null || widget.groupName != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _nameFocus.requestFocus();
+      });
     }
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _code, _days, _start, _lag, _qty, _unit]) {
+    for (final c in [_name, _days, _start, _lag, _qty, _unit]) {
       c.dispose();
     }
     _nameFocus.dispose();
@@ -358,7 +475,7 @@ class _EditableRowState extends State<_EditableRow> {
 
   void _clear() {
     setState(() {
-      for (final c in [_name, _code, _days, _start, _lag, _qty, _unit]) {
+      for (final c in [_name, _days, _start, _lag, _qty, _unit]) {
         c.clear();
       }
       _type = 'activity';
@@ -386,7 +503,6 @@ class _EditableRowState extends State<_EditableRow> {
     if (_saving) return;
     final missing = <String>{};
     if (_name.text.trim().isEmpty) missing.add('name');
-    if (_code.text.trim().isEmpty) missing.add('code');
     final days = int.tryParse(_days.text.trim());
     final start = _parseDmy(_start.text);
     if (!_isGroup) {
@@ -404,7 +520,6 @@ class _EditableRowState extends State<_EditableRow> {
     final ok = await widget.onSubmit(_Draft(
       rowType: _type,
       name: _name.text.trim(),
-      code: _code.text.trim(),
       floorId: _isGroup ? null : _floorId,
       days: _isGroup ? null : days,
       start: _isGroup ? null : start,
@@ -427,10 +542,11 @@ class _EditableRowState extends State<_EditableRow> {
   }
 
   void _cancel() {
-    if (_isNew) {
-      _clear();
+    // Entry rows opened from a group close on Esc; the bottom row just clears.
+    if (widget.onCancel != null) {
+      widget.onCancel!();
     } else {
-      widget.onCancel?.call();
+      _clear();
     }
   }
 
@@ -467,21 +583,6 @@ class _EditableRowState extends State<_EditableRow> {
                 onChanged: _isNew ? (v) => setState(() => _type = v ?? 'activity') : null,
               ),
             ),
-            SizedBox(
-              width: _cName.width,
-              child: Padding(
-                padding: EdgeInsets.only(left: widget.depth * 16.0),
-                child: _box(
-                  _Col('', _cName.width - widget.depth * 16.0),
-                  _input(_name,
-                      focusNode: _nameFocus,
-                      hint: _isNew ? (_isGroup ? 'New group name…' : 'New activity name…') : null,
-                      key: 'name'),
-                  error: _missing.contains('name'),
-                ),
-              ),
-            ),
-            _box(_cCode, _input(_code, hint: 'COD', key: 'code'), error: _missing.contains('code')),
             _box(
               _cFloor,
               _isGroup
@@ -505,6 +606,25 @@ class _EditableRowState extends State<_EditableRow> {
                           onChanged: (v) => setState(() => _floorId = v),
                         ),
               error: _missing.contains('floor'),
+            ),
+            SizedBox(
+              width: _cName.width,
+              child: Padding(
+                // Matches the read-only row's indent + caret gutter so text lines up.
+                padding: EdgeInsets.only(left: 18 + widget.depth * 16.0),
+                child: _box(
+                  _Col('', _cName.width - 18 - widget.depth * 16.0),
+                  _input(_name,
+                      focusNode: _nameFocus,
+                      hint: !_isNew
+                          ? null
+                          : widget.groupName != null
+                              ? 'New ${_isGroup ? 'sub-group' : 'activity'} in ${widget.groupName}…'
+                              : (_isGroup ? 'New group name…' : 'New activity name…'),
+                      key: 'name'),
+                  error: _missing.contains('name'),
+                ),
+              ),
             ),
             _box(_cDays, _isGroup ? _dash() : _input(_days, hint: 'Days', digits: true, key: 'days'),
                 error: _missing.contains('days')),
@@ -538,7 +658,7 @@ class _EditableRowState extends State<_EditableRow> {
                         for (final a in preds)
                           DropdownMenuItem<int?>(
                             value: a.id,
-                            child: Text('${a.code} – ${a.name}', overflow: TextOverflow.ellipsis),
+                            child: Text(_activityLabel(a), overflow: TextOverflow.ellipsis),
                           ),
                       ],
                       onChanged: (v) => setState(() => _predId = v),
@@ -564,7 +684,7 @@ class _EditableRowState extends State<_EditableRow> {
                             onTap: _submit),
                         _IconBtn(
                             icon: Icons.close,
-                            tooltip: _isNew ? 'Clear (Esc)' : 'Cancel (Esc)',
+                            tooltip: widget.onCancel == null ? 'Clear (Esc)' : 'Close (Esc)',
                             onTap: _cancel),
                       ],
                     ),
@@ -620,6 +740,61 @@ class _EditableRowState extends State<_EditableRow> {
         suffixIcon: suffix,
         suffixIconConstraints: const BoxConstraints(minWidth: 18, minHeight: 18),
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      ),
+    );
+  }
+}
+
+// ─── Drag helpers ─────────────────────────────────────────────────────────────
+
+class _DropHint {
+  final int targetId;
+  final _DropIndicator indicator;
+  final int depth;
+
+  /// Insert position among the dragged row's siblings (valid drops only).
+  final int? siblingIndex;
+  final String? invalidGroupName;
+
+  const _DropHint({
+    required this.targetId,
+    required this.indicator,
+    required this.depth,
+    this.siblingIndex,
+    this.invalidGroupName,
+  });
+}
+
+class _DragFeedback extends StatelessWidget {
+  final PmActivity activity;
+  const _DragFeedback({required this.activity});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: const Offset(12, -16),
+      child: Material(
+        elevation: 6,
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.white,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _kBrand.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.drag_indicator, size: 14, color: _kBrand),
+              const SizedBox(width: 6),
+              _TypeChip(isGroup: activity.isGroup),
+              const SizedBox(width: 6),
+              Text(activity.name,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
       ),
     );
   }
