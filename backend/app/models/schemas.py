@@ -33,3 +33,43 @@ class GenerateReportResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
+class AuthUserOut(BaseModel):
+    id: int
+    email: str
+    name: Optional[str] = None
+    picture: Optional[str] = None
+    role: str
+    modules: List[str]
+    last_login_at: Optional[str] = None
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: AuthUserOut
+
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    modules: List[str]
+    is_system: bool
+
+
+class RoleCreateRequest(BaseModel):
+    name: str
+    modules: List[str]
+
+
+class RoleUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    modules: Optional[List[str]] = None
+
+
+class AssignRoleRequest(BaseModel):
+    role_id: int

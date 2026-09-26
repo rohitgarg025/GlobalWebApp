@@ -5,6 +5,11 @@ import '../screens/dashboard_screen.dart';
 import '../screens/coming_soon_screen.dart';
 import '../screens/report_transformer/step1_report_type_screen.dart';
 import '../screens/quantity_sheet/qs_home_screen.dart';
+import '../screens/user_management/user_management_screen.dart';
+import '../screens/project_master/project_master_screen.dart';
+import '../screens/project_schedule/project_schedule_screen.dart';
+import '../screens/hindrance_register/hindrance_register_screen.dart';
+import '../services/auth_service.dart';
 
 /// Breakpoint below which the sidebar collapses into a hamburger drawer.
 const double _kSidebarBreakpoint = 720;
@@ -22,6 +27,9 @@ class _AppShellState extends State<AppShell> {
   String _activeId = 'dashboard';
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  bool _hasModule(String moduleId) =>
+      AuthService.instance.modules.contains(moduleId);
+
   Widget _buildContent() {
     switch (_activeId) {
       case 'dashboard':
@@ -29,9 +37,23 @@ class _AppShellState extends State<AppShell> {
           onNavigate: (id) => setState(() => _activeId = id),
         );
       case 'report_transformer':
+        if (!_hasModule('report_transformer')) break;
         return const Step1ReportTypeScreen();
       case 'quantity_sheet':
+        if (!_hasModule('quantity_sheet')) break;
         return const QsHomeScreen();
+      case 'project_schedule':
+        if (!_hasModule('project_schedule')) break;
+        return const ProjectScheduleScreen();
+      case 'hindrance_register':
+        if (!_hasModule('hindrance_register')) break;
+        return const HindranceRegisterScreen();
+      case 'user_management':
+        if (!_hasModule('user_management')) break;
+        return const UserManagementScreen();
+      case 'project_master':
+        if (!AuthService.instance.isAdmin) break;
+        return const ProjectMasterScreen();
       default:
         // All "coming soon" modules
         final dest = appNavSections
@@ -41,6 +63,13 @@ class _AppShellState extends State<AppShell> {
                     id: '', label: 'Unknown', icon: Icons.help_outline));
         return ComingSoonScreen(title: dest.label, icon: dest.icon);
     }
+    // Reached when the user's role lacks the module for _activeId
+    return const Center(
+      child: Text(
+        'Your role does not have access to this module.',
+        style: TextStyle(color: Colors.grey),
+      ),
+    );
   }
 
   @override
@@ -177,6 +206,7 @@ class _SidebarContent extends StatelessWidget {
   }
 
   Widget _buildFooter() {
+    final user = AuthService.instance.user;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -187,20 +217,32 @@ class _SidebarContent extends StatelessWidget {
           CircleAvatar(
             radius: 14,
             backgroundColor: _kBrand.withValues(alpha: 0.12),
-            child: const Icon(Icons.person_outline, size: 16, color: _kBrand),
+            backgroundImage:
+                user?.picture != null ? NetworkImage(user!.picture!) : null,
+            child: user?.picture == null
+                ? const Icon(Icons.person_outline, size: 16, color: _kBrand)
+                : null,
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Admin User',
+                Text(user?.name ?? user?.email ?? 'Signed in',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(user?.role ?? '',
                     style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                Text('v1.0.0',
-                    style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        const TextStyle(fontSize: 10, color: Colors.grey)),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Sign out',
+            icon: Icon(Icons.logout, size: 16, color: Colors.grey.shade600),
+            onPressed: () => AuthService.instance.signOut(),
           ),
         ],
       ),

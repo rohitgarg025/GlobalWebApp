@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/quantity_sheet/qs_models.dart';
+import '../../services/project_api.dart';
 import '../../services/quantity_sheet_api.dart';
 import '../../services/download_service.dart' show downloadFileOnWeb;
 import 'qs_widgets.dart';
@@ -49,7 +50,7 @@ class _QsViewTabState extends State<QsViewTab> {
 
   Future<void> _loadProjects() async {
     try {
-      final projects = await QsApi.listProjects();
+      final projects = await ProjectApi.listProjects();
       if (mounted) {
         setState(() {
           _projects = projects

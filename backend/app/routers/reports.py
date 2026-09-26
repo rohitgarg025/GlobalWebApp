@@ -81,11 +81,6 @@ REPORT_TYPES = [
 ]
 
 
-@router.get("/health")
-async def health():
-    return {"status": "ok", "version": "1.0.0"}
-
-
 @router.get("/report-types", response_model=ReportTypesResponse)
 async def get_report_types():
     return ReportTypesResponse(report_types=REPORT_TYPES)

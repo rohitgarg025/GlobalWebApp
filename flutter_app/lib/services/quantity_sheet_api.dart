@@ -5,12 +5,22 @@ import 'package:http/http.dart' as http;
 
 import '../models/quantity_sheet/qs_models.dart';
 import 'api_service.dart' show ApiService;
+import 'auth_service.dart';
 
 class QsApi {
   static String get _base => '${ApiService.baseUrl}/api/quantity-sheet';
 
+  static Map<String, String> get _auth => AuthService.authHeaders;
+
+  static void _check401(http.Response res) {
+    if (res.statusCode == 401) AuthService.handleUnauthorized();
+  }
+
   static Future<T> _get<T>(String path, T Function(dynamic) parse) async {
-    final res = await http.get(Uri.parse('$_base$path')).timeout(const Duration(seconds: 15));
+    final res = await http
+        .get(Uri.parse('$_base$path'), headers: _auth)
+        .timeout(const Duration(seconds: 15));
+    _check401(res);
     if (res.statusCode != 200) {
       throw Exception('GET $path failed (${res.statusCode})');
     }
@@ -26,10 +36,11 @@ class QsApi {
     final res = await http
         .post(
           Uri.parse('$_base$path'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ..._auth},
           body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 30));
+    _check401(res);
     if (res.statusCode != successCode && res.statusCode != 200 && res.statusCode != 201) {
       String detail = 'Request failed (${res.statusCode})';
       try {
@@ -49,7 +60,10 @@ class QsApi {
   }
 
   static Future<void> _delete(String path) async {
-    await http.delete(Uri.parse('$_base$path')).timeout(const Duration(seconds: 10));
+    final res = await http
+        .delete(Uri.parse('$_base$path'), headers: _auth)
+        .timeout(const Duration(seconds: 10));
+    _check401(res);
   }
 
   // ── Projects ──────────────────────────────────────────────────────────────
@@ -123,8 +137,9 @@ class QsApi {
 
   static Future<Uint8List> exportExcel(int projectId, String month) async {
     final res = await http
-        .get(Uri.parse('$_base/projects/$projectId/export?month=$month'))
+        .get(Uri.parse('$_base/projects/$projectId/export?month=$month'), headers: _auth)
         .timeout(const Duration(seconds: 30));
+    _check401(res);
     if (res.statusCode != 200) throw Exception('Export failed (${res.statusCode})');
     return res.bodyBytes;
   }
