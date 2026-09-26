@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'api_service.dart' show ApiService;
 import 'auth_service.dart';
@@ -172,7 +173,6 @@ class ScheduleApi {
   static Future<PmActivity> createActivity({
     required int projectId,
     required String name,
-    required String code,
     String rowType = 'activity',
     int? durationDays,
     String? startDate,
@@ -187,7 +187,6 @@ class ScheduleApi {
         '/projects/$projectId/activities',
         {
           'name': name,
-          'code': code,
           'row_type': rowType,
           if (durationDays != null) 'duration_days': durationDays,
           if (startDate != null) 'start_date': startDate,
@@ -204,7 +203,6 @@ class ScheduleApi {
   static Future<PmActivity> updateActivity(
     int activityId, {
     String? name,
-    String? code,
     int? durationDays,
     String? startDate,
     int? predecessorId,
@@ -221,7 +219,6 @@ class ScheduleApi {
         '/activities/$activityId',
         {
           if (name != null) 'name': name,
-          if (code != null) 'code': code,
           if (durationDays != null) 'duration_days': durationDays,
           if (startDate != null) 'start_date': startDate,
           if (predecessorId != null) 'predecessor_id': predecessorId,
@@ -238,4 +235,33 @@ class ScheduleApi {
       );
 
   static Future<void> deleteActivity(int activityId) => _delete('/activities/$activityId');
+
+  /// Sets the order of rows that share one parent group.
+  static Future<void> reorderSiblings(int projectId, List<int> activityIds) async {
+    final res = await http
+        .put(
+          Uri.parse('$_base/projects/$projectId/activities/reorder'),
+          headers: {'Content-Type': 'application/json', ..._auth},
+          body: jsonEncode({'activity_ids': activityIds}),
+        )
+        .timeout(const Duration(seconds: 15));
+    _check401(res);
+    if (res.statusCode != 200) {
+      String detail = 'Reorder failed (${res.statusCode})';
+      try {
+        final err = jsonDecode(res.body);
+        if (err is Map && err['detail'] != null) detail = err['detail'].toString();
+      } catch (_) {}
+      throw Exception(detail);
+    }
+  }
+
+  static Future<Uint8List> exportExcel(int projectId) async {
+    final res = await http
+        .get(Uri.parse('$_base/projects/$projectId/schedule/export'), headers: _auth)
+        .timeout(const Duration(seconds: 30));
+    _check401(res);
+    if (res.statusCode != 200) throw Exception('Export failed (${res.statusCode})');
+    return res.bodyBytes;
+  }
 }

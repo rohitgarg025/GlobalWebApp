@@ -122,6 +122,14 @@ class PmActivity(Base):
     __table_args__ = (UniqueConstraint("project_id", "code"),)
 
 
+class PmCodeCounter(Base):
+    """Last COD number issued per (project, prefix) so codes are never reused."""
+    __tablename__ = "pm_code_counters"
+    project_id = Column(Integer, ForeignKey("projects.id"), primary_key=True)
+    prefix = Column(String, primary_key=True)  # A = activity, G = group
+    last_number = Column(Integer, nullable=False, default=0)
+
+
 class PmActivityLink(Base):
     __tablename__ = "pm_activity_links"
     id = Column(Integer, primary_key=True)

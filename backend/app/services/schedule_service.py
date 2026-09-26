@@ -1,13 +1,14 @@
 """Project schedule: activities, FS links, calendar-day finish dates."""
 from __future__ import annotations
 
+import re
 from collections import defaultdict, deque
 from datetime import date, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.models import PmActivity, PmActivityLink, QsFloor
+from app.db.models import PmActivity, PmActivityLink, PmCodeCounter, QsFloor
 from app.services.project_service import get_project, require_active_project
 
 
@@ -218,7 +219,6 @@ def _roll_up_groups(activities: dict[int, PmActivity]) -> None:
 def _validate_complete(
     row_type: str,
     name: str,
-    code: str,
     duration_days: int | None,
     start_date,
     floor_id: int | None,
@@ -229,8 +229,6 @@ def _validate_complete(
         errors.append("Type must be activity or group")
     if not (name or "").strip():
         errors.append("Name is required")
-    if not (code or "").strip():
-        errors.append("COD is required")
     if row_type == "activity":
         if duration_days is None or duration_days < 1:
             errors.append("Days must be an integer of at least 1")
@@ -267,6 +265,36 @@ def _validate_parent(db: Session, project_id: int, act_id: int | None, parent_id
         )
 
 
+CODE_PREFIX = {"activity": "A", "group": "G"}
+
+
+def _next_code(db: Session, project_id: int, row_type: str) -> str:
+    """Next system COD for the project: A001, A002… / G001… Never reused.
+
+    The counter starts from the highest existing code with that prefix, so
+    projects with older hand-typed codes continue without collisions."""
+    prefix = CODE_PREFIX[row_type]
+    counter = db.query(PmCodeCounter).filter_by(project_id=project_id, prefix=prefix).first()
+    if counter is None:
+        highest = 0
+        pattern = re.compile(rf"^{prefix}(\d+)$")
+        for (code,) in db.query(PmActivity.code).filter_by(project_id=project_id):
+            m = pattern.match(code or "")
+            if m:
+                highest = max(highest, int(m.group(1)))
+        counter = PmCodeCounter(project_id=project_id, prefix=prefix, last_number=highest)
+        db.add(counter)
+    taken = {c for (c,) in db.query(PmActivity.code).filter_by(project_id=project_id)}
+    n = counter.last_number
+    while True:
+        n += 1
+        code = f"{prefix}{n:03d}"
+        if code not in taken:  # skip any legacy hand-typed code that matches
+            break
+    counter.last_number = n
+    return code
+
+
 def _next_sort_order(db: Session, project_id: int) -> int:
     last = (
         db.query(PmActivity)
@@ -281,7 +309,6 @@ def create_activity(
     db: Session,
     project_id: int,
     name: str,
-    code: str,
     duration_days: int | None,
     start_date: date | str | None,
     predecessor_id: int | None,
@@ -295,10 +322,7 @@ def create_activity(
 ) -> dict:
     require_active_project(db, project_id)
     name = (name or "").strip()
-    code = (code or "").strip()
-    _validate_complete(row_type, name, code, duration_days, start_date, floor_id, predecessor_id)
-    if db.query(PmActivity).filter_by(project_id=project_id, code=code).first():
-        raise HTTPException(400, f"COD '{code}' already exists on this project")
+    _validate_complete(row_type, name, duration_days, start_date, floor_id, predecessor_id)
     if parent_id:
         _validate_parent(db, project_id, None, parent_id)
     is_group = row_type == "group"
@@ -314,7 +338,7 @@ def create_activity(
     act = PmActivity(
         project_id=project_id,
         name=name,
-        code=code,
+        code=_next_code(db, project_id, row_type),
         duration_days=duration_days,
         start_date=start,
         finish_date=_finish(start, duration_days),
@@ -366,7 +390,6 @@ def update_activity(
     db: Session,
     activity_id: int,
     name: str | None = None,
-    code: str | None = None,
     duration_days: int | None = None,
     start_date: date | str | None = None,
     start_mode: str | None = None,
@@ -399,22 +422,6 @@ def update_activity(
         if not name.strip():
             raise HTTPException(422, "Activity name is required")
         act.name = name.strip()
-    if code is not None:
-        code = code.strip()
-        if not code:
-            raise HTTPException(422, "COD is required")
-        clash = (
-            db.query(PmActivity)
-            .filter(
-                PmActivity.project_id == act.project_id,
-                PmActivity.code == code,
-                PmActivity.id != act.id,
-            )
-            .first()
-        )
-        if clash:
-            raise HTTPException(400, f"COD '{code}' already exists on this project")
-        act.code = code
     if duration_days is not None:
         if duration_days < 1:
             raise HTTPException(422, "Days must be an integer of at least 1")
@@ -466,11 +473,19 @@ def delete_activity(db: Session, activity_id: int) -> None:
 
 
 def reorder_activities(db: Session, project_id: int, activity_ids: list[int]) -> dict:
+    """Set the order of rows that share one parent (the tree orders siblings only)."""
     require_active_project(db, project_id)
+    rows = (
+        db.query(PmActivity)
+        .filter(PmActivity.project_id == project_id, PmActivity.id.in_(activity_ids))
+        .all()
+    )
+    if len({r.parent_id for r in rows}) > 1:
+        raise HTTPException(400, "Rows can only be reordered within the same group")
+    by_id = {r.id: r for r in rows}
     for order, aid in enumerate(activity_ids):
-        row = db.query(PmActivity).filter_by(id=aid, project_id=project_id).first()
-        if row:
-            row.sort_order = order
+        if aid in by_id:
+            by_id[aid].sort_order = order
     db.commit()
     return get_schedule(db, project_id)
 

@@ -1,12 +1,13 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import AuthUser
 from app.services import schedule_service as svc
+from app.services.schedule_export import export_schedule
 from app.services.auth_deps import require_module
 from app.services.modules import MODULE_PROJECT_SCHEDULE
 
@@ -19,7 +20,8 @@ router = APIRouter(
 
 class ActivityCreate(BaseModel):
     name: str
-    code: str
+    # COD is system-generated; any value sent by an older client is ignored.
+    code: str | None = None
     row_type: str = "activity"  # activity | group
     duration_days: int | None = None  # groups roll up from children
     start_date: date | None = None
@@ -33,7 +35,6 @@ class ActivityCreate(BaseModel):
 
 class ActivityUpdate(BaseModel):
     name: str | None = None
-    code: str | None = None
     duration_days: int | None = None
     start_date: date | None = None
     start_mode: str | None = None
@@ -57,6 +58,16 @@ def get_schedule(project_id: int, db: Session = Depends(get_db)):
     return svc.get_schedule(db, project_id)
 
 
+@router.get("/projects/{project_id}/schedule/export")
+def export_schedule_excel(project_id: int, db: Session = Depends(get_db)):
+    data, filename = export_schedule(db, project_id)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/projects/{project_id}/activities", status_code=201)
 def create_activity(
     project_id: int,
@@ -68,7 +79,6 @@ def create_activity(
         db,
         project_id,
         body.name,
-        body.code,
         body.duration_days,
         body.start_date,
         body.predecessor_id,
@@ -88,7 +98,6 @@ def update_activity(activity_id: int, body: ActivityUpdate, db: Session = Depend
         db,
         activity_id,
         name=body.name,
-        code=body.code,
         duration_days=body.duration_days,
         start_date=body.start_date,
         start_mode=body.start_mode,
