@@ -4,8 +4,26 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="mod service">
+    <list default="true" id="bf384478-053f-4522-9dfc-4a56732afe49" name="Changes" comment="mod service 1">
       <change beforePath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" beforeDir="false" afterPath="$PROJECT_DIR$/.claude/worktrees/nostalgic-sammet" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/db/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/db/database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/db/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/db/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/main_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/main_api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/models/schemas.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/schemas.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/routers/reports.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routers/reports.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/processing/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/processing/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/quantity_sheet.db" beforeDir="false" afterPath="$PROJECT_DIR$/backend/quantity_sheet.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/layout/app_shell.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/layout/app_shell.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/layout/nav_destination.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/layout/nav_destination.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/main.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/main.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/services/api_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/services/api_service.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/lib/services/quantity_sheet_api.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/lib/services/quantity_sheet_api.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/pubspec.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/pubspec.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/test/widget_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/test/widget_test.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/flutter_app/web/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/flutter_app/web/index.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,7 +51,7 @@
   }
 }</component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="CurrentFile" />
+    <option name="selectedTabId" value="ProjectErrors" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 1
@@ -234,10 +252,23 @@
       <option name="project" value="LOCAL" />
       <updated>1783922473103</updated>
     </task>
-    <option name="localTasksCounter" value="14" />
+    <task id="LOCAL-00014" summary="mod service 1">
+      <option name="closed" value="true" />
+      <created>1783930449768</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1783930449769</updated>
+    </task>
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
+    <option name="OPEN_GENERIC_TABS">
+      <map>
+        <entry key="0a201a02-7f34-4b59-9375-c12ff14983b5" value="TOOL_WINDOW" />
+      </map>
+    </option>
     <option name="RECENT_FILTERS">
       <map>
         <entry key="Branch">
@@ -255,6 +286,11 @@
     </option>
     <option name="TAB_STATES">
       <map>
+        <entry key="0a201a02-7f34-4b59-9375-c12ff14983b5">
+          <value>
+            <State />
+          </value>
+        </entry>
         <entry key="MAIN">
           <value>
             <State>
@@ -288,6 +324,7 @@
     <MESSAGE value="ok" />
     <MESSAGE value="added quantity sheet + theoritical consumption logic" />
     <MESSAGE value="mod service" />
-    <option name="LAST_COMMIT_MESSAGE" value="mod service" />
+    <MESSAGE value="mod service 1" />
+    <option name="LAST_COMMIT_MESSAGE" value="mod service 1" />
   </component>
 </project>
