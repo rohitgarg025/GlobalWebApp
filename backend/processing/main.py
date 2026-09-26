@@ -224,11 +224,30 @@ def get_material_sheet(df_list, output_dir=""):
         for col in stock_cols:
             pivot[col] = pivot[col].round(2)
         pivot["Actual - Tag Issue Qty Difference"] = pivot["Stock Issue Qty (D)"] - pivot["Actual Qty"]
+        pivot["Stock Issue Amount"] = pivot["Stock Issue Qty (D)"] * pivot["Actual Rate"]
 
     pivot = pivot.sort_values(by=["Item Group", "Item Desc"])
 
+    pivot_activity_wise = pd.pivot_table(
+        df,
+        index=["Parent WBS Name"],
+        values={"Est Amt": "sum","Actual Amt": "sum"},
+        aggfunc={"Est Amt": "sum","Actual Amt": "sum"},
+        fill_value=0,
+        margins=True,
+        margins_name="Total"
+    ).reset_index()
     output_path = get_output_excel(project_name, "Material_Reconciliation_Report", ".xlsx", output_dir)
     pivot.to_excel(output_path, index=False)
+
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        pivot.to_excel(writer, index=False, sheet_name='Detailed Data', startrow=START_ROW)
+        df.to_excel(writer, index=False, sheet_name='Activity Wise Estimate', startrow=START_ROW)
+        pivot_activity_wise.to_excel(writer, index=False, sheet_name='WBS Wise Estimate', startrow=START_ROW)
+        format_excel_with_headers(writer, 'Detailed Data', pivot, MATERIAL_REPORT, project_name)
+        format_excel_with_headers(writer, 'Activity Wise Estimate', df, MATERIAL_REPORT, project_name)
+        format_excel_with_headers(writer,  'WBS Wise Estimate', pivot_activity_wise, MATERIAL_REPORT, project_name)
+
     print(f"Material Reconciliation Report generated: {output_path}")
     return output_path
 

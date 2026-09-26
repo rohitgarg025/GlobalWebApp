@@ -13,43 +13,25 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    QsProject, QsActivity, QsFloor,
+    Project, QsActivity, QsFloor,
     QsBaseline, QsMonthlyEntry, QsBaselineChangeLog,
 )
+from app.services.project_service import get_project, list_projects as list_master_projects, project_to_dict
 
 
 # ─── Projects ────────────────────────────────────────────────────────────────
 
 def list_projects(db: Session) -> list[dict]:
-    rows = db.query(QsProject).order_by(QsProject.name).all()
-    return [_project_to_dict(r) for r in rows]
+    return list_master_projects(db, include_archived=False)
 
 
-def create_project(db: Session, name: str) -> dict:
-    if db.query(QsProject).filter_by(name=name).first():
-        raise HTTPException(400, f"Project '{name}' already exists")
-    proj = QsProject(name=name)
-    db.add(proj)
-    db.commit()
-    db.refresh(proj)
-    return _project_to_dict(proj)
+def _project_to_dict(p: Project) -> dict:
+    d = project_to_dict(p)
+    return {"id": d["id"], "name": d["name"], "created_at": d["created_at"] or ""}
 
 
-def delete_project(db: Session, project_id: int) -> None:
-    proj = _get_project(db, project_id)
-    db.delete(proj)
-    db.commit()
-
-
-def _project_to_dict(p: QsProject) -> dict:
-    return {"id": p.id, "name": p.name, "created_at": p.created_at.isoformat()}
-
-
-def _get_project(db: Session, project_id: int) -> QsProject:
-    proj = db.query(QsProject).filter_by(id=project_id).first()
-    if not proj:
-        raise HTTPException(404, "Project not found")
-    return proj
+def _get_project(db: Session, project_id: int) -> Project:
+    return get_project(db, project_id)
 
 
 # ─── Floors ──────────────────────────────────────────────────────────────────
@@ -322,7 +304,7 @@ def get_overruns(db: Session, project_id: int | None = None) -> list[dict]:
         ).all()
         for e in entries:
             if e.actual_qty > b.total_estimated_qty:
-                proj = db.query(QsProject).filter_by(id=b.project_id).first()
+                proj = db.query(Project).filter_by(id=b.project_id).first()
                 act = db.query(QsActivity).filter_by(id=b.activity_id).first()
                 floor = db.query(QsFloor).filter_by(id=b.floor_id).first()
                 result.append({
@@ -349,7 +331,7 @@ def get_comparison(db: Session, activity_id: int, month: str) -> dict:
     if not act:
         raise HTTPException(404, "Activity not found")
 
-    projects = db.query(QsProject).order_by(QsProject.name).all()
+    projects = db.query(Project).filter(Project.status == "active").order_by(Project.name).all()
     rows = []
     for proj in projects:
         floors = (

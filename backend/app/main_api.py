@@ -2,11 +2,18 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.reports import router
 from app.routers.quantity_sheet import router as qs_router
+from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
+from app.routers.projects import router as projects_router
+from app.routers.project_schedule import router as schedule_router
+from app.routers.hindrance_register import router as hindrance_router
+from app.services.auth_deps import require_module
+from app.services.modules import MODULE_REPORT_TRANSFORMER, MODULE_QUANTITY_SHEET
 from app.db.database import init_db
 
 
@@ -36,5 +43,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
-app.include_router(qs_router)
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "1.0.0"}
+
+
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(projects_router)
+app.include_router(router, dependencies=[Depends(require_module(MODULE_REPORT_TRANSFORMER))])
+app.include_router(qs_router, dependencies=[Depends(require_module(MODULE_QUANTITY_SHEET))])
+app.include_router(schedule_router)
+app.include_router(hindrance_router)

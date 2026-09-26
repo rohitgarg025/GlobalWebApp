@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/quantity_sheet/qs_models.dart';
+import '../../services/project_api.dart';
 import '../../services/quantity_sheet_api.dart';
 import 'qs_widgets.dart';
 
@@ -30,7 +31,7 @@ class _QsOverrunsTabState extends State<QsOverrunsTab> {
       _error = null;
     });
     try {
-      final projects = await QsApi.listProjects();
+      final projects = await ProjectApi.listProjects();
       final overruns = await QsApi.getOverruns(projectId: _filterProjectId);
       if (mounted) {
         setState(() {

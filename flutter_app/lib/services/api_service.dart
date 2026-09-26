@@ -5,12 +5,20 @@ import 'package:file_picker/file_picker.dart';
 
 import '../models/report_type.dart';
 import '../models/output_file.dart';
+import 'auth_service.dart';
 
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_URL',
     defaultValue: 'http://127.0.0.1:8765',
   );
+
+  /// Auth headers for every API call; signs the user out on a 401.
+  static Map<String, String> get _auth => AuthService.authHeaders;
+
+  static void _check401(http.Response response) {
+    if (response.statusCode == 401) AuthService.handleUnauthorized();
+  }
 
   Future<bool> checkHealth() async {
     try {
@@ -25,9 +33,10 @@ class ApiService {
 
   Future<List<ReportType>> fetchReportTypes() async {
     final response = await http
-        .get(Uri.parse('$baseUrl/api/report-types'))
+        .get(Uri.parse('$baseUrl/api/report-types'), headers: _auth)
         .timeout(const Duration(seconds: 10));
 
+    _check401(response);
     if (response.statusCode != 200) {
       throw Exception('Failed to fetch report types: ${response.statusCode}');
     }
@@ -44,6 +53,7 @@ class ApiService {
   }) async {
     final uri = Uri.parse('$baseUrl/api/reports/generate');
     final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(_auth);
 
     request.fields['report_type_id'] = reportTypeId;
 
@@ -60,6 +70,7 @@ class ApiService {
     final streamedResponse = await request.send().timeout(const Duration(minutes: 5));
     final response = await http.Response.fromStream(streamedResponse);
 
+    _check401(response);
     if (response.statusCode != 200) {
       String detail = 'Report generation failed.';
       try {
@@ -76,9 +87,10 @@ class ApiService {
 
   Future<Uint8List> downloadFile(String fileId) async {
     final response = await http
-        .get(Uri.parse('$baseUrl/api/reports/download/$fileId'))
+        .get(Uri.parse('$baseUrl/api/reports/download/$fileId'), headers: _auth)
         .timeout(const Duration(minutes: 2));
 
+    _check401(response);
     if (response.statusCode != 200) {
       throw Exception('Download failed: ${response.statusCode}');
     }
@@ -88,7 +100,7 @@ class ApiService {
   Future<void> cleanupSession(String jobId) async {
     try {
       await http
-          .delete(Uri.parse('$baseUrl/api/reports/session/$jobId'))
+          .delete(Uri.parse('$baseUrl/api/reports/session/$jobId'), headers: _auth)
           .timeout(const Duration(seconds: 5));
     } catch (_) {
       // Best-effort cleanup
