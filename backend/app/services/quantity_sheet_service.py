@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     Project, QsActivity, QsFloor,
-    QsBaseline, QsMonthlyEntry, QsBaselineChangeLog,
+    QsBaseline, QsMonthlyEntry, QsBaselineChangeLog, PmActivity,
 )
 from app.services.project_service import get_project, list_projects as list_master_projects, project_to_dict
 
@@ -63,6 +63,12 @@ def delete_floor(db: Session, floor_id: int) -> None:
     floor = db.query(QsFloor).filter_by(id=floor_id).first()
     if not floor:
         raise HTTPException(404, "Floor not found")
+    if (
+        db.query(QsBaseline).filter_by(floor_id=floor_id).first()
+        or db.query(QsMonthlyEntry).filter_by(floor_id=floor_id).first()
+        or db.query(PmActivity).filter_by(floor_id=floor_id).first()
+    ):
+        raise HTTPException(409, "This floor is used in the quantity sheet or schedule. Remove those entries first.")
     db.delete(floor)
     db.commit()
 
@@ -103,6 +109,11 @@ def delete_activity(db: Session, activity_id: int) -> None:
     act = db.query(QsActivity).filter_by(id=activity_id).first()
     if not act:
         raise HTTPException(404, "Activity not found")
+    if (
+        db.query(QsBaseline).filter_by(activity_id=activity_id).first()
+        or db.query(QsMonthlyEntry).filter_by(activity_id=activity_id).first()
+    ):
+        raise HTTPException(409, "This activity has quantities entered. Remove those entries first.")
     db.delete(act)
     db.commit()
 

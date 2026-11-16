@@ -12,6 +12,10 @@ from app.routers.users import router as users_router
 from app.routers.projects import router as projects_router
 from app.routers.project_schedule import router as schedule_router
 from app.routers.hindrance_register import router as hindrance_router
+from app.routers.quantity_takeoff import router as takeoff_router
+from app.routers.bbs import router as bbs_router
+from app.routers.drawing_register import router as drawing_router
+from app.routers.release_notes import router as release_notes_router
 from app.services.auth_deps import require_module
 from app.services.modules import MODULE_REPORT_TRANSFORMER, MODULE_QUANTITY_SHEET
 from app.db.database import init_db
@@ -55,3 +59,7 @@ app.include_router(router, dependencies=[Depends(require_module(MODULE_REPORT_TR
 app.include_router(qs_router, dependencies=[Depends(require_module(MODULE_QUANTITY_SHEET))])
 app.include_router(schedule_router)
 app.include_router(hindrance_router)
+app.include_router(takeoff_router)
+app.include_router(bbs_router)
+app.include_router(drawing_router)
+app.include_router(release_notes_router)

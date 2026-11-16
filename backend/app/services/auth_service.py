@@ -2,6 +2,7 @@
 
 import json
 import os
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +17,10 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 # Random default keeps dev working out of the box; set AUTH_SECRET_KEY in
 # production or sessions are invalidated on every restart.
 AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY") or secrets.token_hex(32)
+if not os.getenv("AUTH_SECRET_KEY"):
+    logging.getLogger(__name__).warning(
+        "AUTH_SECRET_KEY is not set: using a random key, so every restart signs all users out. "
+        "Set it (Fly secret / AWS SSM /gbe/AUTH_SECRET_KEY) in production.")
 ADMIN_EMAILS = {
     e.strip().lower()
     for e in os.getenv("ADMIN_EMAILS", "rohitgarg025@gmail.com").split(",")

@@ -157,3 +157,75 @@ class PmHindrance(Base):
     raised_by = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TakeoffJob(Base):
+    """A drawing uploaded for quantity takeoff, and the analysis of one floor."""
+    __tablename__ = "takeoff_jobs"
+    id = Column(Integer, primary_key=True)
+    created_by = Column(String)
+    filename = Column(String, nullable=False)
+    # uploaded → converting → floors_ready → analysing → done | failed
+    status = Column(String, nullable=False, default="uploaded")
+    message = Column(Text)
+    floors_json = Column(Text)        # [{layout, title}]
+    floor_layout = Column(String)
+    floor_title = Column(String)
+    floor_height_m = Column(Float)
+    default_slab_mm = Column(Integer)  # used only where the drawing gives no thickness
+    members_json = Column(Text)       # measured + interpreted members
+    ai_json = Column(Text)            # Claude's interpretation (notes, missing info)
+    rows_json = Column(Text)          # {activity: [rows]} — edited measurement rows
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BbsJob(Base):
+    """A reinforcement drawing processed into a bar bending schedule + cutting plan."""
+    __tablename__ = "bbs_jobs"
+    id = Column(Integer, primary_key=True)
+    created_by = Column(String)
+    filename = Column(String, nullable=False)
+    # uploaded → reading → needs_settings → computing → done | failed
+    status = Column(String, nullable=False, default="uploaded")
+    message = Column(Text)
+    notes_json = Column(Text)       # what the drawing's general notes say
+    strips_json = Column(Text)      # beam lines read from the drawing
+    settings_json = Column(Text)    # confirmed lap / cover / stock / offcut settings
+    lines_json = Column(Text)       # BBS lines (editable)
+    issues_json = Column(Text)
+    plan_json = Column(Text)        # cutting plan per dia
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
+class Drawing(Base):
+    """A drawing sheet in a project's drawing register; its files live in DrawingRevision."""
+    __tablename__ = "drawings"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    number = Column(String, nullable=False)  # uppercase, unique per project
+    title = Column(String, nullable=False)
+    discipline = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String)
+    __table_args__ = (UniqueConstraint("project_id", "number"),)
+
+
+class DrawingRevision(Base):
+    """One issued file of a drawing (R0, R1, …); the highest rev_no is current."""
+    __tablename__ = "drawing_revisions"
+    id = Column(Integer, primary_key=True)
+    drawing_id = Column(Integer, ForeignKey("drawings.id"), nullable=False)
+    rev_no = Column(Integer, nullable=False)
+    filename = Column(String, nullable=False)
+    fmt = Column(String, nullable=False)  # PDF | DWG
+    size_bytes = Column(Integer, nullable=False, default=0)
+    remarks = Column(Text)
+    uploaded_by = Column(String)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    preview_status = Column(String, nullable=False, default="none")  # none | pending | ready | failed
+    __table_args__ = (UniqueConstraint("drawing_id", "rev_no"),)

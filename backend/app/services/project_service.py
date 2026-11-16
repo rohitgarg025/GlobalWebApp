@@ -11,6 +11,8 @@ from app.db.models import (
     QsMonthlyEntry,
     PmActivity,
     PmHindrance,
+    PmCodeCounter,
+    Drawing,
 )
 
 
@@ -129,11 +131,13 @@ def delete_project(db: Session, project_id: int) -> None:
         or db.query(QsMonthlyEntry).filter_by(project_id=project_id).first()
         or db.query(PmActivity).filter_by(project_id=project_id).first()
         or db.query(PmHindrance).filter_by(project_id=project_id).first()
+        or db.query(Drawing).filter_by(project_id=project_id).first()
     )
     if has_children:
         raise HTTPException(
             409,
             "Project has related data. Archive it instead of deleting.",
         )
+    db.query(PmCodeCounter).filter_by(project_id=project_id).delete()
     db.delete(proj)
     db.commit()

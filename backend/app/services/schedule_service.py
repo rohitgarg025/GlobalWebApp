@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.models import PmActivity, PmActivityLink, PmCodeCounter, QsFloor
+from app.db.models import PmActivity, PmActivityLink, PmCodeCounter, PmHindrance, QsFloor
 from app.services.project_service import get_project, require_active_project
 
 
@@ -464,6 +464,8 @@ def delete_activity(db: Session, activity_id: int) -> None:
         raise HTTPException(409, "Move or delete the rows inside this group first.")
     if db.query(PmActivityLink).filter_by(predecessor_id=activity_id).first():
         raise HTTPException(409, "Other activities depend on this one. Remove those links first.")
+    if db.query(PmHindrance).filter_by(activity_id=activity_id).first():
+        raise HTTPException(409, "Hindrances are linked to this activity. Unlink them first.")
     db.query(PmActivityLink).filter_by(successor_id=activity_id).delete()
     project_id = act.project_id
     db.delete(act)

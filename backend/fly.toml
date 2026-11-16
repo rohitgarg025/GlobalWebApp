@@ -8,6 +8,17 @@ primary_region = 'bom'
 
 [build]
 
+# Persistent disk: SQLite database + takeoff/BBS uploads survive deploys and restarts.
+# Create once:  fly volumes create gbe_data --region bom --size 3 -a globalbuildestatewebapp-backend
+[mounts]
+  source = 'gbe_data'
+  destination = '/data'
+
+[env]
+  DB_PATH = '/data/app.db'
+  TAKEOFF_DIR = '/data/takeoff'
+  BBS_DIR = '/data/bbs'
+
 [http_service]
   internal_port = 8000
   force_https = true
@@ -17,6 +28,7 @@ primary_region = 'bom'
 
 [[vm]]
   size = 'shared-cpu-1x'
-  memory = '256mb'
+  # Quantity Takeoff loads full drawings in memory (~0.5 GB for a 40 MB DWG)
+  memory = '2gb'
   cpus = 1
-  memory_mb = 256
+  memory_mb = 2048
