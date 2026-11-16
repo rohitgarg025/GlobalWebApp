@@ -1,0 +1,585 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Global Buildestate web app on AWS - one EC2 server (FastAPI in Docker, uploads on a persistent
+  EBS volume; database SQLite on that volume or, with UseRds, Amazon RDS PostgreSQL). App and API share one HTTPS address (API under /api/*):
+  UseCloudFront=true  -> https://<id>.cloudfront.net (CloudFront serves the site from S3)
+  UseCloudFront=false -> https://<ip-with-dashes>.sslip.io (Caddy on the server, Let's Encrypt).
+
+Parameters:
+  UseCloudFront:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      false until the AWS account is verified for CloudFront (the server then serves HTTPS itself);
+      switch to true later - a stack update, the server and its data are kept.
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.small, t3.medium, t3.large]
+    Description: >
+      t3.small (2 GB + 2 GB swap) handles typical drawings; use t3.medium (4 GB) if large DWG
+      conversions are slow or run out of memory. Changing it keeps the data volume.
+  DataVolumeSizeGiB:
+    Type: Number
+    Default: 20
+    MinValue: 5
+    Description: Persistent disk for the SQLite database and uploaded drawings.
+  CloudFrontPrefixListId:
+    Type: String
+    Description: >
+      Managed prefix list "com.amazonaws.global.cloudfront.origin-facing" in this region
+      (scripts/deploy.sh looks it up). Only CloudFront may reach the server.
+  GitHubRepo:
+    Type: String
+    Default: rohitgarg025/GlobalWebApp
+    Description: owner/name of the repository allowed to deploy.
+  GitHubBranch:
+    Type: String
+    Default: main
+  CreateGitHubOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Set to false if the account already has the GitHub OIDC provider.
+  UseRds:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      true creates a managed PostgreSQL database (Amazon RDS, db.t4g.micro). Before turning it on,
+      store a password in SSM SecureString /gbe-infra/db_password; after the database exists, set
+      /gbe/DATABASE_URL so the app uses it (see README).
+  DbBackupDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+    Description: >
+      Days of point-in-time restore for the database. The AWS Free plan only allows a short
+      period (we use 1); raise it after upgrading the account plan.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  ServerAmiId:
+    Type: String
+    Default: ""
+    Description: >
+      Leave empty on first create. Afterwards set it to the running server's AMI: LatestAmiId is
+      looked up again on every update, and a newer AMI would replace the server.
+
+Conditions:
+  MakeOidc: !Equals [!Ref CreateGitHubOidcProvider, "true"]
+  CF: !Equals [!Ref UseCloudFront, "true"]
+  Rds: !Equals [!Ref UseRds, "true"]
+  PinAmi: !Not [!Equals [!Ref ServerAmiId, ""]]
+
+Resources:
+  # ── Network: one public subnet ────────────────────────────────────────────
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.40.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: gbe-vpc }]
+  Igw:
+    Type: AWS::EC2::InternetGateway
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: gbe-public }]
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+  SubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref Subnet, RouteTableId: !Ref RouteTable }
+
+  ServerSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web traffic only (no SSH - use SSM Session Manager)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress: !If
+        - CF
+        - - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            SourcePrefixListId: !Ref CloudFrontPrefixListId
+            Description: CloudFront origin-facing only
+        - - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP (redirects to HTTPS) }
+          - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS via Caddy }
+
+  # ── Database (optional): managed PostgreSQL, private, reachable only from the server ──
+  DbSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: Rds
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags: [{ Key: Name, Value: gbe-db-b }]    # no internet route; RDS needs two zones
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Condition: Rds
+    Properties:
+      DBSubnetGroupDescription: gbe database subnets
+      SubnetIds: [!Ref Subnet, !Ref DbSubnet2]
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Condition: Rds
+    Properties:
+      GroupDescription: PostgreSQL from the app server only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref ServerSg, Description: app server }
+  Database:
+    Type: AWS::RDS::DBInstance
+    Condition: Rds
+    DeletionPolicy: Snapshot          # deleting the stack keeps a final snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: gbe-db
+      Engine: postgres
+      EngineVersion: "17.9"
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: "20"
+      MaxAllocatedStorage: 100        # grows by itself if it fills up
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: gbe
+      MasterUsername: gbe_app
+      MasterUserPassword: "{{resolve:ssm-secure:/gbe-infra/db_password}}"
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref DbSg]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: !Ref DbBackupDays   # restore to any minute within this many days
+      PreferredBackupWindow: "20:30-21:00"            # 2:00-2:30 am IST
+      PreferredMaintenanceWindow: "sun:21:30-sun:22:30"
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+      Tags: [{ Key: Name, Value: gbe-db }]
+
+  # ── Images and static site ────────────────────────────────────────────────
+  BackendRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: gbe-backend
+      EmptyOnDelete: true
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: >
+          {"rules":[{"rulePriority":1,"description":"keep last 10 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
+          "action":{"type":"expire"}}]}
+
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CF
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Cdn}"
+
+  SiteOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Condition: CF
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-site"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # API requests: never cached; Authorization + query strings reach the backend.
+  ApiCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Condition: CF
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${AWS::StackName}-api-nocache"
+        DefaultTTL: 0
+        MinTTL: 0
+        MaxTTL: 1
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          HeadersConfig:
+            HeaderBehavior: whitelist
+            Headers: [Authorization]
+          QueryStringsConfig: { QueryStringBehavior: all }
+          CookiesConfig: { CookieBehavior: none }
+
+  Cdn:
+    Type: AWS::CloudFront::Distribution
+    Condition: CF
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Global Buildestate web app
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_200        # includes India edge locations
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !Ref SiteOac
+            S3OriginConfig: { OriginAccessIdentity: "" }
+          - Id: api
+            # stable public DNS name of the Elastic IP
+            DomainName: !Sub
+              - "ec2-${Dashed}.${AWS::Region}.compute.amazonaws.com"
+              - Dashed: !Join ["-", !Split [".", !Ref ServerIp]]
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 5
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            CachePolicyId: !Ref ApiCachePolicy
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # Managed-AllViewerExceptHostHeader
+        # No SPA error-page rewrite: the app uses hash routing (/#/...), and a rewrite would
+        # also replace the API's own 403/404 responses with index.html.
+
+  # ── Server ────────────────────────────────────────────────────────────────
+  ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: read-app-parameters
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: [ssm:GetParametersByPath, ssm:GetParameters, ssm:GetParameter]
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gbe/*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gbe-infra/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt SiteBucket.Arn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${SiteBucket.Arn}/*"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals: { kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com" }
+  ServerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref ServerRole] }
+
+  DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Snapshot          # deleting the stack keeps a final snapshot of the data
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AvailabilityZone: !GetAtt Subnet.AvailabilityZone
+      Size: !Ref DataVolumeSizeGiB
+      VolumeType: gp3
+      Encrypted: true
+      Tags:
+        - { Key: Name, Value: gbe-data }
+        - { Key: Backup, Value: gbe-daily }
+
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !If [PinAmi, !Ref ServerAmiId, !Ref LatestAmiId]
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref ServerProfile
+      SubnetId: !Ref Subnet
+      SecurityGroupIds: [!Ref ServerSg]
+      MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 2 }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true }
+      Tags: [{ Key: Name, Value: gbe-server }]
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            # First boot: Docker, swap, persistent /data, and the deploy script.
+            set -euxo pipefail
+            for i in $(seq 1 30); do dnf install -y docker && break || sleep 10; done
+            systemctl enable --now docker
+
+            if [ ! -f /swapfile ]; then
+              dd if=/dev/zero of=/swapfile bs=1M count=2048
+              chmod 600 /swapfile && mkswap /swapfile
+              echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+            swapon -a || true
+
+            # Data volume (attached separately; wait for it)
+            DEV=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${VolNoDash}
+            for i in $(seq 1 60); do [ -e "$DEV" ] && break || sleep 5; done
+            blkid "$DEV" || mkfs -t xfs "$DEV"
+            mkdir -p /data
+            UUID=$(blkid -s UUID -o value "$DEV")
+            grep -q "$UUID" /etc/fstab || echo "UUID=$UUID /data xfs defaults,nofail 0 2" >> /etc/fstab
+            mount -a
+            mkdir -p /data/takeoff /data/bbs /opt/gbe
+
+            cat > /opt/gbe/run.sh <<'RUN'
+            #!/bin/bash
+            #   run.sh [tag]   pull an image tag (default: latest) and (re)start the backend
+            #   run.sh site    refresh the frontend files (direct mode)
+            # Mode (direct | cloudfront) comes from SSM /gbe-infra/mode, set by the stack.
+            set -euo pipefail
+            REGION="${AWS::Region}"
+            IMAGE="${Repo}"
+            infra() { aws ssm get-parameter --region "$REGION" --name "/gbe-infra/$1" --query Parameter.Value --output text; }
+            MODE=$(infra mode)
+            sync_site() {
+              mkdir -p /opt/gbe/www
+              aws s3 sync "s3://$(infra site_bucket)" /opt/gbe/www --delete --only-show-errors --region "$REGION"
+            }
+            if [ "${!1:-}" = site ]; then
+              [ "$MODE" = direct ] && sync_site
+              echo "site refreshed ($MODE mode)"; exit 0
+            fi
+            TAG="${!1:-latest}"
+            ENV_FILE=/opt/gbe/app.env
+            umask 077
+            aws ssm get-parameters-by-path --path /gbe/ --with-decryption --region "$REGION" \
+              --query 'Parameters[*].[Name,Value]' --output text \
+              | while IFS=$'\t' read -r name value; do echo "${!name#/gbe/}=$value"; done > "$ENV_FILE.new"
+            {
+              echo "DB_PATH=/data/app.db"
+              echo "TAKEOFF_DIR=/data/takeoff"
+              echo "BBS_DIR=/data/bbs"
+              echo "PORT=8000"
+            } >> "$ENV_FILE.new"
+            mv "$ENV_FILE.new" "$ENV_FILE"
+            umask 022
+            aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${!IMAGE%%/*}"
+            # registry first; a locally built image (bootstrap deploys) is the fallback
+            docker pull "$IMAGE:$TAG" || docker image inspect "$IMAGE:$TAG" >/dev/null
+            docker rm -f gbe 2>/dev/null || true
+            if [ "$MODE" = direct ]; then PORTS="127.0.0.1:8000:8000"; else PORTS="80:8000"; fi
+            docker run -d --name gbe --restart unless-stopped -p "$PORTS" \
+              --env-file "$ENV_FILE" -v /data:/data "$IMAGE:$TAG"
+            if [ "$MODE" = direct ]; then
+              # HTTPS on <ip-with-dashes>.sslip.io; certificates kept on /data so restarts reuse them
+              sync_site
+              mkdir -p /data/caddy
+              printf '%s {\n\tencode gzip\n\thandle /api/* {\n\t\treverse_proxy 127.0.0.1:8000\n\t}\n\thandle {\n\t\troot * /srv\n\t\tfile_server\n\t}\n}\n' \
+                "$(infra site_host)" > /opt/gbe/Caddyfile
+              docker rm -f caddy 2>/dev/null || true
+              docker run -d --name caddy --restart unless-stopped --network host \
+                -v /opt/gbe/Caddyfile:/etc/caddy/Caddyfile:ro -v /opt/gbe/www:/srv:ro \
+                -v /data/caddy:/data caddy:2
+            else
+              docker rm -f caddy 2>/dev/null || true
+            fi
+            docker image prune -f >/dev/null || true
+            echo "gbe running $IMAGE:$TAG ($MODE mode)"
+            RUN
+            chmod 700 /opt/gbe/run.sh
+            # The first image is pushed by the deploy workflow, which then runs run.sh.
+          - VolNoDash: !Join ["", !Split ["-", !Ref DataVolume]]
+            Repo: !GetAtt BackendRepo.RepositoryUri
+
+  DataAttach:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref Server
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdf
+
+  ServerIp:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttach
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Server
+
+  # Read by /opt/gbe/run.sh on every deploy, so switching modes needs no instance change
+  ModeParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /gbe-infra/mode
+      Type: String
+      Value: !If [CF, cloudfront, direct]
+  SiteHostParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /gbe-infra/site_host
+      Type: String
+      Value: !Sub
+        - "${Dashed}.sslip.io"
+        - Dashed: !Join ["-", !Split [".", !Ref ServerIp]]
+  SiteBucketParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /gbe-infra/site_bucket
+      Type: String
+      Value: !Ref SiteBucket
+
+  # ── Daily snapshots of the data volume (7 kept) ───────────────────────────
+  DlmRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Service: dlm.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole
+  DailySnapshots:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: gbe data volume daily keep 7
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt DlmRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags: [{ Key: Backup, Value: gbe-daily }]
+        Schedules:
+          - Name: daily
+            CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["21:30"] }   # 03:00 IST
+            RetainRule: { Count: 7 }
+            CopyTags: true
+
+  # ── GitHub Actions deploy role (OIDC, no stored keys) ─────────────────────
+  GitHubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-github-deploy"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - MakeOidc
+                - !Ref GitHubOidc
+                - !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepo}:ref:refs/heads/${GitHubBranch}"
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt BackendRepo.Arn
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !GetAtt SiteBucket.Arn
+              - Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject, s3:GetObject]
+                Resource: !Sub "${SiteBucket.Arn}/*"
+              - !If
+                - CF
+                - Effect: Allow
+                  Action: cloudfront:CreateInvalidation
+                  Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Cdn}"
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Server}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript"
+              - Effect: Allow
+                Action: [ssm:GetCommandInvocation, ssm:ListCommandInvocations]
+                Resource: "*"
+
+Outputs:
+  AppUrl:
+    Description: Open the app here (API is under /api)
+    Value: !If
+      - CF
+      - !Sub "https://${Cdn.DomainName}"
+      - !Sub
+        - "https://${Dashed}.sslip.io"
+        - Dashed: !Join ["-", !Split [".", !Ref ServerIp]]
+  Mode:
+    Value: !If [CF, cloudfront, direct]
+  SiteBucketName:
+    Value: !Ref SiteBucket
+  DistributionId:
+    Condition: CF
+    Value: !Ref Cdn
+  InstanceId:
+    Value: !Ref Server
+  EcrRepositoryUri:
+    Value: !GetAtt BackendRepo.RepositoryUri
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+  DbEndpoint:
+    Condition: Rds
+    Value: !GetAtt Database.Endpoint.Address
