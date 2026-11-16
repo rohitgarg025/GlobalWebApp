@@ -62,6 +62,9 @@ const Map<String, String> kModuleLabels = {
   'quantity_sheet': 'Quantity Sheet',
   'project_schedule': 'Project Schedule',
   'hindrance_register': 'Hindrance Register',
+  'drawing_register': 'Drawing Register',
+  'quantity_takeoff': 'Quantity Takeoff (AI)',
+  'bbs': 'Bar Bending Schedule',
   'user_management': 'User Management',
 };
 

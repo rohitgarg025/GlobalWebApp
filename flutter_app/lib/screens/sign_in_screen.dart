@@ -66,7 +66,7 @@ class SignInScreen extends StatelessWidget {
                   ),
                 ),
                 const Text(
-                  'Operations Platform',
+                  'Operating System',
                   style: TextStyle(fontSize: 13, color: Colors.grey),
                 ),
                 const SizedBox(height: 32),

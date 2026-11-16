@@ -9,6 +9,10 @@ import '../screens/user_management/user_management_screen.dart';
 import '../screens/project_master/project_master_screen.dart';
 import '../screens/project_schedule/project_schedule_screen.dart';
 import '../screens/hindrance_register/hindrance_register_screen.dart';
+import '../screens/drawing_register/drawing_register_screen.dart';
+import '../screens/quantity_takeoff/takeoff_screen.dart';
+import '../screens/bbs/bbs_screen.dart';
+import '../screens/version_history/version_history_screen.dart';
 import '../services/auth_service.dart';
 
 /// Breakpoint below which the sidebar collapses into a hamburger drawer.
@@ -48,12 +52,24 @@ class _AppShellState extends State<AppShell> {
       case 'hindrance_register':
         if (!_hasModule('hindrance_register')) break;
         return const HindranceRegisterScreen();
+      case 'drawing_register':
+        if (!_hasModule('drawing_register')) break;
+        return const DrawingRegisterScreen();
+      case 'quantity_takeoff':
+        if (!_hasModule('quantity_takeoff')) break;
+        return const TakeoffScreen();
+      case 'bbs':
+        if (!_hasModule('bbs')) break;
+        return const BbsScreen();
       case 'user_management':
         if (!_hasModule('user_management')) break;
         return const UserManagementScreen();
       case 'project_master':
         if (!AuthService.instance.isAdmin) break;
         return const ProjectMasterScreen();
+      case 'version_history':
+        if (!AuthService.instance.isAdmin) break;
+        return const VersionHistoryScreen();
       default:
         // All "coming soon" modules
         final dest = appNavSections
@@ -194,7 +210,7 @@ class _SidebarContent extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Operations Platform',
+                  'Operating System',
                   style: TextStyle(fontSize: 10, color: Colors.grey),
                 ),
               ],

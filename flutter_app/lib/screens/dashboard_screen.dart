@@ -10,28 +10,34 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildWelcomeBanner(),
-          const SizedBox(height: 32),
-          _buildSectionTitle('Active Modules'),
-          const SizedBox(height: 16),
-          _buildModuleGrid(context, enabled: true),
-          const SizedBox(height: 32),
-          _buildSectionTitle('Coming Soon'),
-          const SizedBox(height: 16),
-          _buildModuleGrid(context, enabled: false),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 600;
+        final gap = narrow ? 24.0 : 32.0;
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(narrow ? 16 : 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildWelcomeBanner(compact: constraints.maxWidth < 480),
+              SizedBox(height: gap),
+              _buildSectionTitle('Active Modules'),
+              const SizedBox(height: 16),
+              _buildModuleGrid(context, enabled: true),
+              SizedBox(height: gap),
+              _buildSectionTitle('Coming Soon'),
+              const SizedBox(height: 16),
+              _buildModuleGrid(context, enabled: false),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildWelcomeBanner() {
+  Widget _buildWelcomeBanner({required bool compact}) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(compact ? 20 : 28),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0066CC), Color(0xFF0099FF)],
@@ -46,11 +52,11 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Welcome to Global Buildestate',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 22,
+                    fontSize: compact ? 19 : 22,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -80,12 +86,13 @@ class DashboardScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 16),
-          Opacity(
-            opacity: 0.2,
-            child: Icon(Icons.domain,
-                size: 100, color: Colors.white),
-          ),
+          if (!compact) ...[
+            const SizedBox(width: 16),
+            Opacity(
+              opacity: 0.2,
+              child: Icon(Icons.domain, size: 100, color: Colors.white),
+            ),
+          ],
         ],
       ),
     );
@@ -107,20 +114,26 @@ class DashboardScreen extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 700 ? 3 : 2;
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
+        final w = constraints.maxWidth;
+        final crossAxisCount = w > 700 ? 3 : (w >= 340 ? 2 : 1);
+        final spacing = w < 600 ? 12.0 : 16.0;
+        return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: 1.6,
-          children: allDests
-              .map((dest) => _ModuleCard(
-                    dest: dest,
-                    onTap: enabled ? () => onNavigate(dest.id) : null,
-                  ))
-              .toList(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: 128,
+          ),
+          itemCount: allDests.length,
+          itemBuilder: (context, i) {
+            final dest = allDests[i];
+            return _ModuleCard(
+              dest: dest,
+              onTap: enabled ? () => onNavigate(dest.id) : null,
+            );
+          },
         );
       },
     );
@@ -166,7 +179,7 @@ class _ModuleCardState extends State<_ModuleCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -236,6 +249,8 @@ class _ModuleCardState extends State<_ModuleCard> {
                 children: [
                   Text(
                     widget.dest.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -244,6 +259,7 @@ class _ModuleCardState extends State<_ModuleCard> {
                           : Colors.grey.shade400,
                     ),
                   ),
+                  if (enabled) const SizedBox(height: 2),
                   if (enabled)
                     Text(
                       'Open →',

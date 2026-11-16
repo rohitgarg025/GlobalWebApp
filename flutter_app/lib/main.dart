@@ -14,7 +14,7 @@ class GlobalBuildestateApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Global Buildestate – Operations Platform',
+      title: 'Global Buildestate – Operating System',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
