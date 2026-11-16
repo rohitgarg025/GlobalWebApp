@@ -11,10 +11,6 @@ router = APIRouter(prefix="/api/quantity-sheet", tags=["quantity-sheet"])
 
 # ─── Pydantic schemas ────────────────────────────────────────────────────────
 
-class ProjectCreate(BaseModel):
-    name: str
-
-
 class FloorCreate(BaseModel):
     name: str
     display_order: int = 0
@@ -50,16 +46,6 @@ class SubmitRequest(BaseModel):
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db)):
     return svc.list_projects(db)
-
-
-@router.post("/projects", status_code=201)
-def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
-    return svc.create_project(db, body.name)
-
-
-@router.delete("/projects/{project_id}", status_code=204)
-def delete_project(project_id: int, db: Session = Depends(get_db)):
-    svc.delete_project(db, project_id)
 
 
 # ─── Floors ──────────────────────────────────────────────────────────────────

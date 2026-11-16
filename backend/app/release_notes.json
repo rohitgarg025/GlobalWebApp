@@ -1,0 +1,213 @@
+[
+  {
+    "date": "2026-11-17",
+    "title": "Database moved to Amazon RDS PostgreSQL",
+    "area": "Platform",
+    "summary": "The app's data now lives in a managed PostgreSQL database on Amazon RDS (Mumbai), separate from the app server. The app started with an empty database: the earlier test projects, floors and drawings were not carried over.",
+    "sections": [
+      {
+        "heading": "Setup",
+        "points": [
+          "Amazon RDS PostgreSQL 17, db.t4g.micro, 20 GB storage that grows automatically, encrypted.",
+          "Private: only the app server can reach it, nothing on the internet.",
+          "Its password is kept in AWS Parameter Store and never written anywhere else.",
+          "Deletion protection is on, and deleting the AWS setup leaves a final snapshot."
+        ]
+      },
+      {
+        "heading": "Backups",
+        "points": [
+          "It can be restored to any minute within the last 1 day. The AWS Free plan doesn't allow longer; raise this to 7 days after upgrading the account plan.",
+          "Uploaded drawings, BBS and takeoff files are still on the server's data disk, with daily snapshots kept for 7 days."
+        ]
+      },
+      {
+        "heading": "Fresh start",
+        "points": [
+          "Project Master starts empty. Add the real projects.",
+          "Users are created again when they first sign in. Admins are recognised from the admin email list; other users need their role set again in User Management.",
+          "The old test data (SQLite file and uploaded files) is kept aside on the server in /data/_sqlite_test_data_2026-11 until it's no longer needed."
+        ]
+      },
+      {
+        "heading": "Checked before the switch",
+        "points": [
+          "Database migrations ran on PostgreSQL.",
+          "Sign-in, projects, floors, schedule, hindrances, drawings, users, roles and Version History all worked against a scratch copy, which was then deleted."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Version History page",
+    "area": "Administration",
+    "summary": "Admins can see what changed in the app and on which date, under Administration → Version History.",
+    "sections": []
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Database prepared for future growth",
+    "area": "Platform",
+    "summary": "The database stays on SQLite, but the app can now move to a managed database (Amazon RDS PostgreSQL) by changing one setting and copying the data once. The daily backups were tested by restoring one.",
+    "sections": [
+      {
+        "heading": "Where the data lives",
+        "points": [
+          "All data is in one SQLite database file, /data/app.db, on the AWS server's separate data disk. Uploaded drawings, BBS and takeoff files sit on the same disk.",
+          "That disk survives server restarts and changes of server size.",
+          "AWS takes a snapshot of the disk every day and keeps the last 7."
+        ]
+      },
+      {
+        "heading": "What changed",
+        "points": [
+          "Connection setting: the backend now accepts a DATABASE_URL, like a Spring datasource URL. If it is not set, the existing SQLite file is used, so nothing changes on AWS today.",
+          "Migrations: table changes are now versioned scripts (Alembic, the Python equivalent of Flyway) instead of hand-written start-up fixes. Version 0001 is the full schema as of November 2026. The app applies new versions by itself on start-up.",
+          "Data checks: SQLite now enforces links between tables, as Postgres always does.",
+          "Deleting a project that still has drawings is refused with a clear message.",
+          "Deleting a floor used in the quantity sheet or schedule is refused with a clear message.",
+          "Deleting a quantity-sheet activity that has quantities entered is refused with a clear message.",
+          "Deleting a schedule activity that has hindrances linked to it is refused with a clear message."
+        ]
+      },
+      {
+        "heading": "Backup restore test (10 Nov 2026)",
+        "points": [
+          "The snapshot from 9 Nov 2026, about 3:16 am IST, was restored to a temporary disk and opened read-only. The live app kept running throughout.",
+          "The database passed the SQLite integrity check, with no broken links.",
+          "Projects (3), floors (27), users and roles matched the live data exactly.",
+          "The temporary disk was deleted afterwards."
+        ]
+      },
+      {
+        "heading": "When to move to RDS PostgreSQL",
+        "points": [
+          "When more than one backend server is needed.",
+          "When many people save at the same moment.",
+          "When restore-to-the-minute is needed instead of last night's snapshot.",
+          "When reporting tools such as Power BI or Metabase need direct access.",
+          "Expected cost is very roughly $15–25 a month for the smallest size."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Renamed to \"Operating System\"",
+    "area": "App",
+    "summary": "\"Operations Platform\" now reads \"Operating System\" under the Global Buildestate logo in the sidebar, on the sign-in page and in the browser tab title.",
+    "sections": []
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Dashboard fits on phones",
+    "area": "Dashboard",
+    "summary": "The module cards on the Dashboard no longer overflow on phone screens.",
+    "sections": [
+      {
+        "heading": "Details",
+        "points": [
+          "Cards have a fixed height, so the icon, name and \"Open →\" always fit.",
+          "There are 3 cards per row on desktop and 2 on phones, or 1 on very narrow screens.",
+          "Long module names wrap to two lines.",
+          "On small phones the welcome banner is more compact."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Drawing Register",
+    "area": "New module",
+    "summary": "Each project keeps its current drawings in one place, with full revision history.",
+    "sections": [
+      {
+        "heading": "What it does",
+        "points": [
+          "Upload PDF or DWG drawings, up to 100 MB each, with drawing number, name, discipline and remarks.",
+          "Revisions are numbered automatically R0, R1, R2 and so on. The newest is Current and older ones are kept as Superseded.",
+          "PDFs open in a new browser tab. For DWGs the server makes a picture of the drawing to preview.",
+          "Search by name or number, and filter by format and discipline.",
+          "Anyone whose role includes the Drawing Register module can view, download and upload."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "title": "Moved to AWS (Mumbai)",
+    "area": "Platform",
+    "summary": "The app is hosted on AWS in the Mumbai region and served over HTTPS at 13-205-5-179.sslip.io.",
+    "sections": [
+      {
+        "heading": "Details",
+        "points": [
+          "One server runs the backend, with the website files served from the same address.",
+          "Data is on a separate disk that survives restarts, with daily snapshots kept for 7 days.",
+          "A reboot test on 30 Oct 2026 confirmed that Project Master data survives a restart."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-30",
+    "title": "Bar Bending Schedule (BBS)",
+    "area": "New module",
+    "summary": "A bar bending schedule is generated from beam drawings (DWG). Laps and covers are taken from the drawing notes.",
+    "sections": []
+  },
+  {
+    "date": "2026-09-27",
+    "title": "Quantity Takeoff",
+    "area": "New module",
+    "summary": "Quantities are taken off from structural drawings (DWG) floor by floor, with AI assistance, and can be exported to Excel.",
+    "sections": []
+  },
+  {
+    "date": "2026-09-27",
+    "title": "Project Schedule improvements",
+    "area": "Project Schedule",
+    "summary": "Schedule rows can be grouped and linked to floors from Project Master.",
+    "sections": []
+  },
+  {
+    "date": "2026-09-26",
+    "title": "Login, roles, Project Master, Project Schedule and Hindrance Register",
+    "area": "New modules",
+    "summary": "Users sign in with Google, and roles control which modules each person sees.",
+    "sections": [
+      {
+        "heading": "Details",
+        "points": [
+          "Project Master is one company-wide list of projects and floors, used by every module.",
+          "Project Schedule is an MS Project-style schedule with activity links.",
+          "Hindrance Register records site hindrances and delays against projects and activities.",
+          "Quantity Sheet tracks baselines and monthly quantities by floor.",
+          "New users sign in as guests with access to the Report Transformer only."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-06-11",
+    "title": "Quantity Sheet",
+    "area": "New module",
+    "summary": "Quantity sheet with theoretical consumption logic.",
+    "sections": []
+  },
+  {
+    "date": "2026-04-02",
+    "title": "New web app",
+    "area": "Platform",
+    "summary": "The report tool became a web app, with a Flutter front end and a FastAPI backend.",
+    "sections": []
+  },
+  {
+    "date": "2025-10-09",
+    "title": "Report Transformer",
+    "area": "New module",
+    "summary": "ERP activity, material and labour reports are turned into formatted Excel sheets.",
+    "sections": []
+  }
+]

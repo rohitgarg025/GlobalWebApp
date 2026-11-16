@@ -1,0 +1,165 @@
+name: Deploy
+
+# Where a push to main deploys is set by the repository variable DEPLOY_TARGET:
+#   fly | aws | both        (unset → push deploys nowhere; nothing changes until you choose)
+# "Run workflow" (manual) has a target dropdown that overrides it for that run.
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "flutter_app/**", "infra/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to deploy
+        type: choice
+        options: [default, fly, aws, both]
+        default: default
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write          # AWS OIDC
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+  FLY_BACKEND_URL: https://globalbuildestatewebapp-backend.fly.dev
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      fly: ${{ steps.t.outputs.fly }}
+      aws: ${{ steps.t.outputs.aws }}
+    steps:
+      - id: t
+        run: |
+          target="${{ github.event.inputs.target }}"
+          if [ -z "$target" ] || [ "$target" = "default" ]; then target="${{ vars.DEPLOY_TARGET }}"; fi
+          if [ -z "$target" ]; then
+            echo "::notice::DEPLOY_TARGET is not set - nothing deployed. Set it to fly, aws or both (Settings → Variables)."
+            target=none
+          fi
+          case "$target" in fly|aws|both|none) ;; *) echo "::error::DEPLOY_TARGET must be fly, aws or both (got '$target')"; exit 1;; esac
+          echo "Deploy target: $target"
+          echo "fly=$([ "$target" = fly ] || [ "$target" = both ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "aws=$([ "$target" = aws ] || [ "$target" = both ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  # ── Fly.io ──────────────────────────────────────────────────────────────
+  fly-backend:
+    needs: resolve
+    if: needs.resolve.outputs.fly == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        working-directory: backend
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  fly-frontend:
+    needs: [resolve, fly-backend]
+    if: needs.resolve.outputs.fly == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --build-arg API_URL=${{ env.FLY_BACKEND_URL }}
+        working-directory: flutter_app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  # ── AWS ─────────────────────────────────────────────────────────────────
+  aws-backend:
+    needs: resolve
+    if: needs.resolve.outputs.aws == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push image
+        run: |
+          IMAGE="${{ vars.AWS_ECR_URI }}"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+      - name: Restart container on the server
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ vars.AWS_INSTANCE_ID }}" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${{ github.sha }}" \
+            --parameters 'commands=["/opt/gbe/run.sh ${{ github.sha }}"]' \
+            --query Command.CommandId --output text)
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id "${{ vars.AWS_INSTANCE_ID }}" --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ vars.AWS_INSTANCE_ID }}" \
+                  --query '[StandardOutputContent,StandardErrorContent]' --output text
+                exit 1 ;;
+            esac
+            sleep 5
+          done
+          [ "$STATUS" = Success ] || { echo "::error::deploy command did not finish"; exit 1; }
+      - name: Health check through CloudFront
+        run: |
+          for i in $(seq 1 24); do
+            curl -fsS "${{ vars.AWS_APP_URL }}/api/health" && exit 0
+            sleep 5
+          done
+          echo "::error::backend not healthy at ${{ vars.AWS_APP_URL }}/api/health"; exit 1
+
+  aws-frontend:
+    needs: [resolve, aws-backend]
+    if: needs.resolve.outputs.aws == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build web (same origin → API under /api)
+        working-directory: flutter_app
+        run: |
+          flutter pub get
+          flutter build web --release --dart-define=API_URL=
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Upload to S3 and refresh CloudFront
+        working-directory: flutter_app/build/web
+        run: |
+          B="s3://${{ vars.AWS_SITE_BUCKET }}"
+          # long-lived cache for assets, always-revalidate for the entry points
+          aws s3 sync . "$B" --delete --cache-control "public,max-age=31536000,immutable" \
+            --exclude index.html --exclude flutter_service_worker.js --exclude main.dart.js \
+            --exclude flutter_bootstrap.js --exclude version.json --exclude manifest.json
+          for f in index.html flutter_service_worker.js main.dart.js flutter_bootstrap.js version.json manifest.json; do
+            [ -f "$f" ] && aws s3 cp "$f" "$B/$f" --cache-control "no-cache"
+          done
+          if [ -n "${{ vars.AWS_DISTRIBUTION_ID }}" ]; then
+            # CloudFront mode: CloudFront serves the bucket; refresh its cache
+            aws cloudfront create-invalidation --distribution-id "${{ vars.AWS_DISTRIBUTION_ID }}" \
+              --paths "/index.html" "/" "/main.dart.js" "/flutter_bootstrap.js" "/flutter_service_worker.js" >/dev/null
+          else
+            # Direct mode: the server (Caddy) serves a copy of the bucket; tell it to refresh
+            CMD_ID=$(aws ssm send-command --instance-ids "${{ vars.AWS_INSTANCE_ID }}" \
+              --document-name AWS-RunShellScript --comment "site ${{ github.sha }}" \
+              --parameters 'commands=["/opt/gbe/run.sh site"]' --query Command.CommandId --output text)
+            aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${{ vars.AWS_INSTANCE_ID }}"
+          fi
+          echo "Deployed to ${{ vars.AWS_APP_URL }}"

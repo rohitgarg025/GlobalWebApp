@@ -12,10 +12,7 @@ class QsSetupTab extends StatefulWidget {
 }
 
 class _QsSetupTabState extends State<QsSetupTab> {
-  List<QsProject> _projects = [];
   List<QsActivity> _activities = [];
-  QsProject? _selectedProject;
-  List<QsFloor> _floors = [];
   bool _loading = false;
   String? _error;
 
@@ -31,22 +28,12 @@ class _QsSetupTabState extends State<QsSetupTab> {
       _error = null;
     });
     try {
-      final projects = await QsApi.listProjects();
       final activities = await QsApi.listActivities();
       if (mounted) {
         setState(() {
-          _projects = projects;
           _activities = activities;
           _loading = false;
-          // Re-select if still valid
-          if (_selectedProject != null) {
-            _selectedProject = projects.cast<QsProject?>().firstWhere(
-                  (p) => p?.id == _selectedProject!.id,
-                  orElse: () => null,
-                );
-          }
         });
-        if (_selectedProject != null) _loadFloors();
       }
     } catch (e) {
       if (mounted) {
@@ -58,14 +45,6 @@ class _QsSetupTabState extends State<QsSetupTab> {
     }
   }
 
-  Future<void> _loadFloors() async {
-    if (_selectedProject == null) return;
-    try {
-      final floors = await QsApi.listFloors(_selectedProject!.id);
-      if (mounted) setState(() => _floors = floors);
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) return const LoadingCenter(message: 'Loading setup data…');
@@ -73,67 +52,13 @@ class _QsSetupTabState extends State<QsSetupTab> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: _projectsCard()),
-          const SizedBox(width: 16),
-          Expanded(child: _activitiesCard()),
-          const SizedBox(width: 16),
-          Expanded(child: _floorsCard()),
-        ],
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: _activitiesCard(),
+        ),
       ),
     );
-  }
-
-  // ── Projects ───────────────────────────────────────────────────────────────
-
-  Widget _projectsCard() {
-    return _SetupCard(
-      title: 'Projects',
-      icon: Icons.apartment_outlined,
-      onAdd: _showAddProjectDialog,
-      children: _projects.isEmpty
-          ? [_emptyRow('No projects yet')]
-          : _projects
-              .map((p) => _SetupRow(
-                    label: p.name,
-                    selected: _selectedProject?.id == p.id,
-                    onTap: () {
-                      setState(() {
-                        _selectedProject = p;
-                        _floors = [];
-                      });
-                      _loadFloors();
-                    },
-                    onDelete: () => _deleteProject(p),
-                  ))
-              .toList(),
-    );
-  }
-
-  Future<void> _showAddProjectDialog() async {
-    final name = await _showTextDialog('Add Project', 'Project name');
-    if (name == null || name.isEmpty) return;
-    try {
-      await QsApi.createProject(name);
-      _loadAll();
-    } catch (e) {
-      _showError(e.toString());
-    }
-  }
-
-  Future<void> _deleteProject(QsProject p) async {
-    final ok = await _confirm('Delete project "${p.name}"?',
-        'All floors and entries for this project will be deleted.');
-    if (!ok) return;
-    try {
-      await QsApi.deleteProject(p.id);
-      if (_selectedProject?.id == p.id) setState(() => _selectedProject = null);
-      _loadAll();
-    } catch (e) {
-      _showError(e.toString());
-    }
   }
 
   // ── Activities ─────────────────────────────────────────────────────────────
@@ -181,8 +106,7 @@ class _QsSetupTabState extends State<QsSetupTab> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: kBrand),
             onPressed: () => Navigator.pop(ctx, true),
@@ -217,91 +141,7 @@ class _QsSetupTabState extends State<QsSetupTab> {
     }
   }
 
-  // ── Floors ─────────────────────────────────────────────────────────────────
-
-  Widget _floorsCard() {
-    if (_selectedProject == null) {
-      return _SetupCard(
-        title: 'Floors',
-        icon: Icons.layers_outlined,
-        onAdd: null,
-        children: [_emptyRow('Select a project first')],
-      );
-    }
-    return _SetupCard(
-      title: 'Floors — ${_selectedProject!.name}',
-      icon: Icons.layers_outlined,
-      onAdd: _showAddFloorDialog,
-      children: _floors.isEmpty
-          ? [_emptyRow('No floors yet')]
-          : _floors
-              .asMap()
-              .entries
-              .map((e) => _SetupRow(
-                    label: e.value.name,
-                    subtitle: 'Order ${e.value.displayOrder}',
-                    onDelete: () => _deleteFloor(e.value),
-                  ))
-              .toList(),
-    );
-  }
-
-  Future<void> _showAddFloorDialog() async {
-    final name = await _showTextDialog('Add Floor', 'Floor name (e.g. B2, GF, 1F, RF)');
-    if (name == null || name.isEmpty) return;
-    final order = _floors.isEmpty
-        ? 0
-        : _floors.map((f) => f.displayOrder).reduce((a, b) => a > b ? a : b) + 1;
-    try {
-      await QsApi.createFloor(_selectedProject!.id, name, order);
-      _loadFloors();
-    } catch (e) {
-      _showError(e.toString());
-    }
-  }
-
-  Future<void> _deleteFloor(QsFloor f) async {
-    final ok = await _confirm('Delete floor "${f.name}"?',
-        'All entries for this floor will be deleted.');
-    if (!ok) return;
-    try {
-      await QsApi.deleteFloor(f.id);
-      _loadFloors();
-    } catch (e) {
-      _showError(e.toString());
-    }
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────────
-
-  Future<String?> _showTextDialog(String title, String hint) async {
-    final ctrl = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(
-              labelText: hint, border: const OutlineInputBorder()),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kBrand),
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Add', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) => ctrl.dispose());
-    return result;
-  }
 
   Future<bool> _confirm(String title, String msg) async {
     return await showDialog<bool>(
@@ -412,15 +252,11 @@ class _SetupCard extends StatelessWidget {
 class _SetupRow extends StatefulWidget {
   final String label;
   final String? subtitle;
-  final bool selected;
-  final VoidCallback? onTap;
   final VoidCallback onDelete;
 
   const _SetupRow({
     required this.label,
     this.subtitle,
-    this.selected = false,
-    this.onTap,
     required this.onDelete,
   });
 
@@ -436,51 +272,35 @@ class _SetupRowState extends State<_SetupRow> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.selected
-                ? kBrand.withValues(alpha: 0.08)
-                : _hovered
-                    ? Colors.grey.withValues(alpha: 0.05)
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: widget.selected
-                ? Border.all(color: kBrand.withValues(alpha: 0.3))
-                : null,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.label,
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: widget.selected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: widget.selected ? kBrand : Colors.black87)),
-                    if (widget.subtitle != null)
-                      Text(widget.subtitle!,
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: _hovered ? Colors.grey.withValues(alpha: 0.05) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.label,
+                      style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                  if (widget.subtitle != null)
+                    Text(widget.subtitle!,
+                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
               ),
-              if (_hovered || widget.selected)
-                GestureDetector(
-                  onTap: widget.onDelete,
-                  child: Icon(Icons.delete_outline,
-                      size: 16, color: Colors.grey.shade400),
-                ),
-            ],
-          ),
+            ),
+            if (_hovered)
+              GestureDetector(
+                onTap: widget.onDelete,
+                child: Icon(Icons.delete_outline,
+                    size: 16, color: Colors.grey.shade400),
+              ),
+          ],
         ),
       ),
     );

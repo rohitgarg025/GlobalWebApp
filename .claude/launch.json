@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && .venv/bin/python3 -m uvicorn app.main_api:app --host 127.0.0.1 --port 8765"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd flutter_app && flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1 --dart-define=API_URL=http://127.0.0.1:8765"
+      ],
+      "port": 8080
+    }
+  ]
+}

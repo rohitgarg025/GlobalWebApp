@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
+
 /// A single navigation destination in the sidebar.
 class NavDestination {
   final String id;
   final String label;
   final IconData icon;
   final IconData activeIcon;
-  final String? badge; // e.g. "New", "Beta"
+  final String? badge;
   final bool enabled;
+  final String? requiredModule;
+  final bool requiredAdmin;
 
   const NavDestination({
     required this.id,
@@ -16,6 +20,8 @@ class NavDestination {
     IconData? activeIcon,
     this.badge,
     this.enabled = true,
+    this.requiredModule,
+    this.requiredAdmin = false,
   }) : activeIcon = activeIcon ?? icon;
 }
 
@@ -27,8 +33,25 @@ class NavSection {
   const NavSection({required this.title, required this.destinations});
 }
 
+/// Navigation filtered to what the signed-in user's role allows.
+List<NavSection> get appNavSections {
+  final modules = AuthService.instance.modules;
+  final isAdmin = AuthService.instance.isAdmin;
+  return _allNavSections
+      .map((s) => NavSection(
+            title: s.title,
+            destinations: s.destinations
+                .where((d) =>
+                    (d.requiredModule == null || modules.contains(d.requiredModule)) &&
+                    (!d.requiredAdmin || isAdmin))
+                .toList(),
+          ))
+      .where((s) => s.destinations.isNotEmpty)
+      .toList();
+}
+
 /// The full sidebar navigation config — add new modules here.
-final List<NavSection> appNavSections = [
+final List<NavSection> _allNavSections = [
   const NavSection(
     title: 'MAIN',
     destinations: [
@@ -48,58 +71,75 @@ final List<NavSection> appNavSections = [
         label: 'Report Transformer',
         icon: Icons.assessment_outlined,
         activeIcon: Icons.assessment,
+        requiredModule: 'report_transformer',
       ),
       NavDestination(
         id: 'quantity_sheet',
         label: 'Quantity Sheet',
         icon: Icons.grid_on_outlined,
         activeIcon: Icons.grid_on,
-        badge: 'New',
+        requiredModule: 'quantity_sheet',
       ),
       NavDestination(
-        id: 'project_tracker',
-        label: 'Project Tracker',
-        icon: Icons.construction_outlined,
-        activeIcon: Icons.construction,
-        badge: 'Soon',
-        enabled: false,
+        id: 'project_schedule',
+        label: 'Project Schedule',
+        icon: Icons.timeline_outlined,
+        activeIcon: Icons.timeline,
+        requiredModule: 'project_schedule',
       ),
       NavDestination(
-        id: 'budget_planner',
-        label: 'Budget Planner',
-        icon: Icons.account_balance_wallet_outlined,
-        activeIcon: Icons.account_balance_wallet,
-        badge: 'Soon',
-        enabled: false,
+        id: 'hindrance_register',
+        label: 'Hindrance Register',
+        icon: Icons.report_problem_outlined,
+        activeIcon: Icons.report_problem,
+        requiredModule: 'hindrance_register',
       ),
       NavDestination(
-        id: 'material_registry',
-        label: 'Material Registry',
-        icon: Icons.inventory_2_outlined,
-        activeIcon: Icons.inventory_2,
-        badge: 'Soon',
-        enabled: false,
+        id: 'drawing_register',
+        label: 'Drawing Register',
+        icon: Icons.description_outlined,
+        activeIcon: Icons.description,
+        requiredModule: 'drawing_register',
+      ),
+      NavDestination(
+        id: 'quantity_takeoff',
+        label: 'Quantity Takeoff',
+        icon: Icons.architecture_outlined,
+        activeIcon: Icons.architecture,
+        badge: 'AI',
+        requiredModule: 'quantity_takeoff',
+      ),
+      NavDestination(
+        id: 'bbs',
+        label: 'Bar Bending Schedule',
+        icon: Icons.straighten_outlined,
+        activeIcon: Icons.straighten,
+        requiredModule: 'bbs',
       ),
     ],
   ),
   const NavSection(
-    title: 'ANALYTICS',
+    title: 'ADMINISTRATION',
     destinations: [
       NavDestination(
-        id: 'insights',
-        label: 'Insights',
-        icon: Icons.bar_chart_outlined,
-        activeIcon: Icons.bar_chart,
-        badge: 'Soon',
-        enabled: false,
+        id: 'user_management',
+        label: 'User Management',
+        icon: Icons.manage_accounts_outlined,
+        activeIcon: Icons.manage_accounts,
+        requiredModule: 'user_management',
       ),
       NavDestination(
-        id: 'reports_history',
-        label: 'Reports History',
-        icon: Icons.history_outlined,
-        activeIcon: Icons.history,
-        badge: 'Soon',
-        enabled: false,
+        id: 'project_master',
+        label: 'Project Master',
+        icon: Icons.apartment_outlined,
+        activeIcon: Icons.apartment,
+        requiredAdmin: true,
+      ),
+      NavDestination(
+        id: 'version_history',
+        label: 'Version History',
+        icon: Icons.history,
+        requiredAdmin: true,
       ),
     ],
   ),
